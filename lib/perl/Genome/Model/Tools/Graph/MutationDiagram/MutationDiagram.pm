@@ -118,7 +118,7 @@ sub _add_mutations {
             my ($domains_ref, $amino_acid_length) = $self->get_domains_and_amino_acid_length($mutation->{transcript_name});
             my @domains = @$domains_ref;
             if (scalar @domains == 0) {
-                next;
+#                next;  Disabled by DK, because it makes the tool not build diagrams.
             }
             $mutation->{domains} = $domains_ref;
             $mutation->{protein_length} = $amino_acid_length;
