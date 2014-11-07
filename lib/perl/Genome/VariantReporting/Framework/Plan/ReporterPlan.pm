@@ -41,24 +41,34 @@ sub create_from_hashref {
     );
 
     my @filter_plans;
-    for my $filter_name (keys %{$hashref->{filters}}) {
+    while (my ($name, $params) = each %{$hashref->{filters}}) {
         push @filter_plans, Genome::VariantReporting::Framework::Plan::FilterPlan->create(
-            name => $filter_name,
-            params => $hashref->{filters}->{$filter_name},
+            name => $name,
+            params => $params,
         );
     }
     $self->filter_plans(\@filter_plans);
 
     my @interpreter_plans;
-    for my $interpreter_name (keys %{$hashref->{interpreters}}) {
+    while (my ($name, $params) = each %{$hashref->{interpreters}}) {
         push @interpreter_plans, Genome::VariantReporting::Framework::Plan::InterpreterPlan->create(
-            name => $interpreter_name,
-            params => $hashref->{interpreters}->{$interpreter_name},
+            name => $name,
+            params => $params,
         );
     }
     $self->interpreter_plans(\@interpreter_plans);
 
     return $self;
+}
+
+sub __translation_errors__ {
+    my ($self, $provider) = @_;
+    my @errors;
+    push @errors, $self->object->_translation_errors($provider->translations, $self->object->name);
+    for my $child (values(%{$self->object->interpreters}), values(%{$self->object->filters})) {
+        push @errors, $child->_translation_errors($provider->translations, $child->name);
+    }
+    return @errors;
 }
 
 sub __plan_errors__ {
@@ -110,5 +120,22 @@ sub requires_annotations {
     }
     return $needed->members;
 }
+
+sub object {
+    my $self = shift;
+
+    my $reporter = $self->SUPER::object(@_);
+
+    for my $filter_plan ($self->filter_plans) {
+        $reporter->add_filter_object($filter_plan->object(@_));
+    }
+    for my $interpreter_plan ($self->interpreter_plans) {
+        $reporter->add_interpreter_object($interpreter_plan->object(@_));
+    }
+
+    return $reporter;
+}
+Memoize::memoize("object", LIST_CACHE => 'MERGE');
+
 
 1;

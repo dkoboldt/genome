@@ -16,6 +16,10 @@ class Genome::VariantReporting::Command::Wrappers::ModelPair {
             is => 'Genome::Model::Build',
             is_optional => 1,
         },
+        gold_sample_name => {
+            is => 'Text',
+            is_optional => 1,
+        },
         base_output_dir => { is => 'Text', },
         plan_file_basename => {
             is => 'Text',
@@ -30,7 +34,7 @@ class Genome::VariantReporting::Command::Wrappers::ModelPair {
                 $roi_nospace =~ s/ /_/g;
                 return File::Spec->join($base_output_dir, $roi_nospace); |,
         },
-        resource_file => {
+        translations_file => {
             calculate_from => [qw/ output_dir /],
             calculate => q( File::Spec->join($output_dir, "resource.yaml") ),
         },
@@ -54,7 +58,13 @@ sub _plan_search_dir {
 }
 
 sub report_names {
-    return qw(trio_full_report.tsv trio_simple_report.tsv);
+    my ($self, $variant_type) = @_;
+    my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->create_from_file($self->plan_file($variant_type));
+    my @file_names;
+    for my $reporter_plan ($plan->reporter_plans) {
+        push @file_names, $reporter_plan->object->file_name;
+    }
+    return @file_names;
 }
 
 sub reports_directory {
@@ -72,8 +82,8 @@ sub create {
     my $self = $class->SUPER::create(@_);
     Genome::Sys->create_directory($self->output_dir);
     $self->generate_sample_legend_file;
-    $self->generate_resource_file;
-    my $provider = Genome::VariantReporting::Framework::Component::ResourceProvider->create_from_file($self->resource_file);
+    $self->generate_translations_file;
+    my $provider = Genome::VariantReporting::Framework::Component::RuntimeTranslations->create_from_file($self->translations_file);
     for my $variant_type (qw(snvs indels)) {
         Genome::Sys->create_directory($self->reports_directory($variant_type));
         my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->create_from_file($self->plan_file($variant_type));
@@ -112,6 +122,19 @@ sub get_aligned_bams {
     return \@aligned_bams;
 }
 
+sub get_sample_and_bam_map {
+    my $self = shift;
+
+    my %bams = (
+        $self->discovery->tumor_sample->name  => $self->discovery->tumor_bam,
+        $self->discovery->normal_sample->name => $self->discovery->normal_bam,
+    );
+    if ($self->followup) {
+        $bams{$self->followup->tumor_sample->name} = $self->followup->tumor_bam,
+    }
+    return %bams;
+}
+
 sub get_translations {
     my $self = shift;
     my %translations;
@@ -119,6 +142,9 @@ sub get_translations {
     $translations{normal} = $self->discovery->normal_sample->name;
     if ($self->followup) {
         $translations{followup_tumor} = $self->followup->tumor_sample->name;
+    }
+    if ($self->gold_sample_name) {
+        $translations{gold} = $self->gold_sample_name;
     }
     return \%translations;
 }
@@ -138,13 +164,14 @@ sub generate_sample_legend_file {
     }
 }
 
-sub generate_resource_file {
+sub generate_translations_file {
     my $self = shift;
 
     return if not $self->is_valid;
-    my $resource = {};
 
-    $resource->{aligned_bam_result_id} = $self->get_aligned_bams;
+    my $translations = $self->get_translations;
+
+    $translations->{aligned_bam_result_id} = $self->get_aligned_bams;
 
     my %feature_list_ids;
     my $on_target_feature_list = Genome::FeatureList->get(name => $self->discovery->region_of_interest_set->name);
@@ -153,23 +180,35 @@ sub generate_resource_file {
     $feature_list_ids{SEG_DUP} = $segdup_feature_list->id;
     # TODO: There has to be a better way...
     $feature_list_ids{AML_RMG} = '0e4973c600244c3f804d54bee6f81145';
-    $resource->{feature_list_ids} = \%feature_list_ids;
-    $resource->{homopolymer_list_id} = '696318bab30d47d49fab9afa845691b7';
+    $translations->{feature_list_ids} = \%feature_list_ids;
+    $translations->{homopolymer_list_id} = '696318bab30d47d49fab9afa845691b7';
 
-    $resource->{reference_fasta} = $self->discovery->reference_sequence_build->full_consensus_path("fa");
+    $translations->{reference_fasta} = $self->reference_sequence_build->full_consensus_path("fa");
 
-    $resource->{translations} = $self->get_translations;
+    $translations->{dbsnp_vcf} = $self->discovery->previously_discovered_variations_build->snvs_vcf;
+    $translations->{nhlbi_vcf} = _get_nhlbi_vcf(); 
 
-    $resource->{dbsnp_vcf} = $self->discovery->previously_discovered_variations_build->snvs_vcf;
-
-    YAML::DumpFile(File::Spec->join($self->resource_file), $resource);
+    YAML::DumpFile(File::Spec->join($self->translations_file), $translations);
 
     return 1;
+}
+
+sub reference_sequence_build {
+    my $self = shift;
+    return $self->discovery->reference_sequence_build;
 }
 
 sub input_vcf {
     my ($self, $variant_type) = @_;
     return $self->discovery->get_detailed_vcf_result($variant_type)->get_vcf($variant_type);
 }
+
+sub _get_nhlbi_vcf {
+    return Genome::Model::Build::ImportedVariationList->get(
+        version    => '2012.07.23', 
+        model_name => 'nhlbi-esp-GRCh37-lite-build37',
+    )->snvs_vcf;
+}
+
 1;
 

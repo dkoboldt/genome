@@ -7,7 +7,7 @@ use Test::More tests => 6;
 
 # this gets a canonical test build, and is set up to not really hit the db
 # we temporarily have it overridden to test against Obi's example
-my $base_dir= $ENV{"GENOME_TEST_INPUTS"} . "Genome-Model-ClinSeq-Command-MakeCircosPlot/2014-2-5";
+my $base_dir= $ENV{"GENOME_TEST_INPUTS"} . "Genome-Model-ClinSeq-Command-MakeCircosPlot/2014-10-23";
 my $expected_output_dir = "$base_dir/expected-output";
 ok(-e $expected_output_dir, "expected output dir exists: $expected_output_dir");
 
@@ -27,12 +27,11 @@ my $actual_output_dir = Genome::Sys->create_temp_directory();
 ok(-e $actual_output_dir, "test output dir exists");
 
 # run the command
-my $result = Genome::Model::ClinSeq::Command::MakeCircosPlot->execute(
+my $command = Genome::Model::ClinSeq::Command::MakeCircosPlot->create(
     build => $test_build,
     output_directory => $actual_output_dir,
 );
-print $result."\n";
-ok($result, "execution succeeded");
+ok($command->execute, "execution succeeded");
 
 # verify results
 

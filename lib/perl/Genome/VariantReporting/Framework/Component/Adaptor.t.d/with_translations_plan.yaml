@@ -1,0 +1,10 @@
+experts:
+    __translated_test__:
+        __planned__: tumor
+        __input__: __input__
+reporters:
+    __test__:
+        interpreters:
+            __test__: {}
+        params:
+            file_name: report.txt

@@ -4,6 +4,14 @@ use strict;
 use warnings;
 use Genome;
 use File::Basename qw(basename);
+use Set::Scalar;
+use List::MoreUtils qw(uniq);
+use File::Slurp qw();
+
+my $DOCM = {
+    snvs_build => "a06152c107884ba78b90c5f09be17163",
+    indels_build => "45841689d047419ea26df89128d6f121",
+};
 
 class Genome::VariantReporting::Command::Wrappers::Trio {
     is => 'Command::V2',
@@ -56,9 +64,53 @@ sub execute {
     }
     File::Slurp::write_file(File::Spec->join($self->output_directory, "workflow.xml"), $self->_workflow->get_xml);
     $self->_workflow->execute(%{$self->_workflow_inputs});
+    $self->combine_discovery_and_followup_reports;
+    $self->create_igv_xml(\@model_pairs);
+    return 1;
+}
+
+sub create_igv_xml {
+    my $self = shift;
+    my $model_pairs = shift;
+
+    my %bams = map { $_->get_sample_and_bam_map } @$model_pairs;
+    my @reference_sequence_builds = uniq map { $_->reference_sequence_build } @$model_pairs;
+    unless (scalar(@reference_sequence_builds) == 1) {
+        die $self->error_message("Found more than one reference sequence build:" . Data::Dumper::Dumper(@reference_sequence_builds));
+    }
+
     my @roi_directories = map {basename $_} glob(File::Spec->join($self->output_directory, "discovery", "*"));
     for my $roi_directory (@roi_directories) {
-        for my $base (Genome::VariantReporting::Command::Wrappers::ModelPair->report_names) {
+        my $discovery_bed = File::Spec->join($ENV{GENOME_SYS_SERVICES_FILES_URL}, $self->output_directory, 'discovery', $roi_directory, 'trio_report.bed');
+        my $additional_bed = File::Spec->join($ENV{GENOME_SYS_SERVICES_FILES_URL}, $self->output_directory, 'followup', $roi_directory, 'trio_report.bed');
+        my $germline_bed = File::Spec->join($ENV{GENOME_SYS_SERVICES_FILES_URL}, $self->output_directory, 'germline', $roi_directory, 'germline_report.bed');
+        my $docm_bed = File::Spec->join($ENV{GENOME_SYS_SERVICES_FILES_URL}, $self->output_directory, 'docm', $roi_directory, 'cle_docm_report.bed');
+
+        my $reference_sequence_name_cmd = Genome::Model::Tools::Analysis::ResolveIgvReferenceName->execute(
+            reference_name => $reference_sequence_builds[0]->name,
+        );
+
+        #create the xml file for review
+        my $dumpXML = Genome::Model::Tools::Analysis::DumpIgvXmlMulti->create(
+            bams             => join(',', map {File::Spec->join($ENV{GENOME_SYS_SERVICES_FILES_URL}, $_)} values %bams),
+            labels           => join(',', keys %bams),
+            output_file      => File::Spec->join($self->output_directory, "$roi_directory.igv.xml"),
+            genome_name      => $self->tumor_sample->name,
+            review_bed_files => [$discovery_bed, $additional_bed, $germline_bed, $docm_bed],
+            reference_name   => $reference_sequence_name_cmd->igv_reference_name,
+        );
+        unless ($dumpXML->execute) {
+            confess $self->error_message("Failed to create IGV xml file");
+        }
+    }
+}
+
+sub combine_discovery_and_followup_reports {
+    my $self = shift;
+
+    my @roi_directories = map {basename $_} glob(File::Spec->join($self->output_directory, "discovery", "*"));
+    for my $roi_directory (@roi_directories) {
+        for my $base ($self->_trio_report_file_names) {
             my $discovery_report = File::Spec->join($self->output_directory, "discovery", $roi_directory, $base);
             my $additional_report = File::Spec->join($self->output_directory, "followup", $roi_directory, $base);
             Genome::VariantReporting::Command::CombineReports->execute(
@@ -71,6 +123,10 @@ sub execute {
         }
     }
     return 1;
+}
+
+sub _trio_report_file_names {
+    return qw(trio_full_report.tsv trio_simple_report.tsv trio_acmg_report.tsv);
 }
 
 sub add_final_converge {
@@ -95,8 +151,19 @@ sub get_model_pairs {
         followup_sample => $self->followup_sample,
         normal_sample => $self->normal_sample,
         output_dir => $self->output_directory,
+        other_input_vcf_pairs => {docm => $self->vcf_files_from_imported_variation_builds($DOCM)},
     );
     return $factory->get_model_pairs;
+}
+
+sub vcf_files_from_imported_variation_builds {
+    my ($self, $builds) = @_;
+    my $snvs_build = Genome::Model::Build->get($builds->{snvs_build});
+    my $indels_build = Genome::Model::Build->get($builds->{indels_build});
+    return [
+        $snvs_build->snvs_vcf,
+        $indels_build->snvs_vcf,
+    ];
 }
 
 sub add_reports_to_workflow {
@@ -109,19 +176,28 @@ sub add_reports_to_workflow {
             variant_type => $variant_type,
             output_directory => $model_pair->reports_directory($variant_type),
             plan_file => $model_pair->plan_file($variant_type),
-            resource_file => $model_pair->resource_file,
+            translations_file => $model_pair->translations_file,
             log_directory => $model_pair->logs_directory($variant_type),
         );
         $report_operations{$variant_type} = $self->add_report_to_workflow(\%params);
     }
-    for my $base ($model_pair->report_names) {
+    my $snv_reports = Set::Scalar->new(grep {!($_ =~ /vcf$/)} $model_pair->report_names("snvs"));
+    my $indel_reports = Set::Scalar->new(grep {!($_ =~ /vcf$/)} $model_pair->report_names("indels"));
+    my $both_reports = $snv_reports->intersection($indel_reports);
+    for my $base ($both_reports->members) {
         my %combine_params = (
-            sort_columns => [qw(chromosome_name start stop reference variant)],
-            contains_header => 1,
             output_file => File::Spec->join($model_pair->output_dir, $base),
-            split_indicators => [qw(per_library)],
             separator => "\t",
         );
+        if ($base =~ m/bed$/) {
+            $combine_params{sort_columns} = [qw(1 2 3)];
+            $combine_params{contains_header} = 0,
+        }
+        else {
+            $combine_params{sort_columns} = [qw(chromosome_name start stop reference variant)];
+            $combine_params{contains_header} = 1,
+            $combine_params{split_indicators} = [qw(per_library)],
+        }
         $self->add_combine_to_workflow(\%combine_params, \%report_operations, $base);
     }
 }
@@ -156,9 +232,9 @@ sub add_combine_to_workflow {
         name => join(" ", "Converge", $counter),
     );
     $self->_workflow->add_operation($converge);
-    for my $variant_type (keys %$reports_to_combine) {
+    while (my ($variant_type, $report) = each %$reports_to_combine) {
         $self->_workflow->create_link(
-            source => $reports_to_combine->{$variant_type}, source_property => "output_directory",
+            source => $report, source_property => "output_directory",
             destination => $converge, destination_property => $variant_type."_output_dir",
         );
     }

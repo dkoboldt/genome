@@ -14,6 +14,10 @@ class Genome::VariantReporting::Command::Wrappers::GoldEvaluation {
         model => {
             is => 'Genome::Model::SomaticValidation',
         },
+        gold_sample_name => {
+            is => 'Text',
+            doc => 'The name of the sample in the VCF used to retrieve genotypes.',
+        },
         output_directory => {
             is => 'Path',
             is_output => 1,
@@ -39,6 +43,7 @@ sub execute {
             discovery => $model->last_succeeded_build,
             base_output_dir => $self->output_directory,
             plan_file_basename => 'gold_germline_report_TYPE.yaml',
+            gold_sample_name => $self->gold_sample_name,
         );
     } else {
         #Somatic
@@ -46,6 +51,7 @@ sub execute {
             discovery => $model->last_succeeded_build,
             base_output_dir => $self->output_directory,
             plan_file_basename => 'gold_somatic_report_TYPE.yaml',
+            gold_sample_name => $self->gold_sample_name,
         );
     }
     for my $variant_type (qw(snvs indels)) {
@@ -55,7 +61,7 @@ sub execute {
             variant_type => $variant_type,
             output_directory => $model_pair->reports_directory($variant_type),
             plan_file => $model_pair->plan_file($variant_type),
-            resource_file => $model_pair->resource_file,
+            translations_file => $model_pair->translations_file,
             log_directory => $model_pair->logs_directory($variant_type),
         );
         Genome::VariantReporting::Command::CreateReport->execute(%params);

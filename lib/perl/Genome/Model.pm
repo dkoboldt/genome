@@ -448,7 +448,7 @@ sub _resolve_resource_requirements_for_build {
     # This is called during '_resolve_workflow_for_build' to specify the lsf resource requirements of the one-step
     # workflow that is generated from '_execute_build'.
     my ($build) = @_;
-    return "-R 'select[model!=Opteron250 && type==LINUX64] rusage[tmp=10000:mem=1000]' -M 1000000";
+    return "-R 'rusage[tmp=10000:mem=1000]' -M 1000000";
 }
 
 sub _initialize_build {
@@ -1168,7 +1168,7 @@ sub files_ignored_by_build_diff { () }
 #Used by Analysis Project configuration to "pair" somatic samples or otherwise aggregate them for analysis
 sub requires_subject_mapping { return 0; }
 
-sub sudo_wrapper { '/usr/local/bin/bsub-genome-build' }
+sub sudo_wrapper { '/usr/local/bin/sudo-genome-build-start' }
 
 sub should_run_as {
     my $self = shift;

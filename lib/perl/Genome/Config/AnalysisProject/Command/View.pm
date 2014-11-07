@@ -55,6 +55,11 @@ class Genome::Config::AnalysisProject::Command::View {
             default_value => 0,
             doc => 'Display timeline events',
         },
+        fast_model_summary => {
+            is => 'Boolean',
+            default_value => 0,
+            doc => "Use fast model summary that does not due 'Build Needed' check",
+        },
     ],
 };
 
@@ -266,7 +271,9 @@ sub _write_model_summary {
     if ($self->_should_write_models) {
         $self->_write_section_heading($handle, 'Models');
 
-        my $summary = $self->_get_model_summary;
+        my $summary = $self->fast_model_summary
+                    ? $self->_get_fast_model_summary
+                    : $self->_get_model_summary;
         $self->_write_summary_data($handle, $summary);
     }
 }
@@ -285,6 +292,20 @@ sub _should_write_models {
 
 
 sub _get_model_summary {
+    my $self = shift;
+
+    my $summary = {};
+    my $model_iterator = Genome::Model->create_iterator(
+        'analysis_projects.id' => $self->analysis_project->id,
+    );
+    while (my $model = $model_iterator->next) {
+        $summary->{$model->class}->{$model->status}++;
+    }
+    return $summary;
+}
+
+
+sub _get_fast_model_summary {
     my $self = shift;
 
     return $self->_summary_data_from_query($self->_model_summary_query);
@@ -393,7 +414,7 @@ sub _config_items {
             '-order_by' => 'created_at');
     } else {
         return $self->analysis_project->config_items(
-            'status in' => ['active', undef], '-order_by' => 'created_at');
+            'status' => 'active', '-order_by' => 'created_at');
     }
 }
 
@@ -444,17 +465,10 @@ sub _get_config_item_lines {
             'Concrete', $self->_get_concrete_string($config_item)],
         ['Created by', $config_item->created_by,
             'Status', $self->_color_status(
-                $self->_get_config_status($config_item))],
+                $config_item->status)],
         ['Created', $config_item->created_at,
             'Updated', $config_item->updated_at],
     );
-}
-
-
-sub _get_config_status {
-    my ($self, $config_item) = @_;
-
-    return $config_item->status || 'active';
 }
 
 

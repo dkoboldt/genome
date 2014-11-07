@@ -5,7 +5,7 @@ use warnings;
 
 use Genome;
 
-my $DEFAULT_LSF_RESOURCE = "-R 'select[type==LINUX64 && mem>=64000] rusage[mem=64000] span[hosts=1]' -M 64000000 -n 4";
+my $DEFAULT_LSF_RESOURCE = "-R 'select[mem>=64000] rusage[mem=64000] span[hosts=1]' -M 64000000 -n 4";
 
 class Genome::Model::DifferentialExpression::Command::Cuffdiff {
     is => ['Command::V2'],
@@ -22,7 +22,7 @@ class Genome::Model::DifferentialExpression::Command::Cuffdiff {
 
 sub execute {
     my $self = shift;
-    
+
     my $build = $self->build;
     my $model = $build->model;
 
@@ -68,7 +68,8 @@ sub execute {
         use_version => $model->differential_expression_version,
         output_directory => $output_directory,
     );
-    unless (Genome::Model::Tools::Cufflinks::Cuffdiff->execute(%cuffdiff_params)) {
+    my $cuffdiff_cmd = Genome::Model::Tools::Cufflinks::Cuffdiff->execute(%cuffdiff_params);
+    unless ($cuffdiff_cmd and $cuffdiff_cmd->result) {
         $self->error_message('Failed to execute Cuffdiff with params: '. Data::Dumper::Dumper(%cuffdiff_params));
         return;
     }

@@ -21,15 +21,20 @@ isa_ok($factory->get_class('reporters', $pkg->name), $pkg);
 
 my $data_dir = __FILE__.".d";
 
-my $reporter = $pkg->create(file_name => 'tumor-only');
+my $reporter = $pkg->create(file_name => 'tumor-only', generate_legend_file => 0);
 ok($reporter, "Reporter created successfully");
 
-my $override = Sub::Override->new('Genome::VariantReporting::Reporter::WithHeader::write_legend_file', sub {return 1});
+my $position_interpreter = Genome::VariantReporting::Generic::PositionInterpreter->create();
+my $vep_interpreter = Genome::VariantReporting::Suite::Vep::VepInterpreter->create();
+my $rsid_interpreter = Genome::VariantReporting::Generic::RsidInterpreter->create();
+my $caf_interpreter = Genome::VariantReporting::Suite::Joinx::Dbsnp::CafInterpreter->create();
+my $nhlbi_interpreter = Genome::VariantReporting::Suite::Joinx::Nhlbi::MafInterpreter->create();
+my $vaf_interpreter = Genome::VariantReporting::Suite::BamReadcount::VafInterpreter->create();
+my $thousand_interpreter = Genome::VariantReporting::Suite::Joinx::ThousandGenomes::AfInterpreter->create();
+$reporter->add_interpreter_objects($position_interpreter, $vep_interpreter, $rsid_interpreter, $caf_interpreter, $nhlbi_interpreter, $vaf_interpreter, $thousand_interpreter);
 
 my $output_dir = Genome::Sys->create_temp_directory();
 $reporter->initialize($output_dir);
-
-$override->restore;
 
 my %interpretations = (
     'position' => {

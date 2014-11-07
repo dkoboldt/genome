@@ -116,6 +116,7 @@ EOS
 # NOTE: These are in order.
 # Please put the most recent first.
 my @PICARD_VERSIONS = (
+    '1.123' => '/gscmnt/sata132/techd/solexa/jwalker/lib/picard-tools-1.123',
     '1.82' => $ENV{GENOME_SW_LEGACY_JAVA} . '/samtools/picard-tools-1.82',
     '1.77' => $ENV{GENOME_SW_LEGACY_JAVA} . '/samtools/picard-tools-1.77',
     '1.52' => $ENV{GENOME_SW_LEGACY_JAVA} . '/samtools/picard-tools-1.52',
@@ -165,6 +166,7 @@ sub installed_picard_versions {
     my @versions;
     for my $f (@files) {
         if($f =~ /picard-([\d\.]+).jar$/) {
+            next if $1 eq '1.124';
             push @versions, $1;
         }
     }
@@ -219,6 +221,11 @@ sub run_java_vm {
     }
     if ($self->log_file) {
         $java_vm_cmd .= ' >> ' . $self->log_file;
+    }
+
+    # hack to workaround premature release of 1.123 with altered classnames
+    if ($java_vm_cmd =~ /picard-tools.?1\.123/) {
+        $java_vm_cmd =~ s/net\.sf\.picard\./picard./;
     }
     
     $params{'cmd'} = $java_vm_cmd;

@@ -18,6 +18,10 @@ class Genome::VariantReporting::Reporter::WithHeader {
             is => 'Text',
             default => "\t",
         },
+        generate_legend_file => {
+            is => 'Boolean',
+            default => 1,
+        }
     },
     has_transient_optional => [
         _legend_fh => {},
@@ -28,7 +32,6 @@ sub __errors__ {
     my $self = shift;
     my @errors = $self->SUPER::__errors__;
 
-    my @sample_names = eval{$self->sample_names};
     my %available_fields = $self->available_fields_dict();
     for my $header ($self->headers) {
         my $error_desc;
@@ -49,30 +52,25 @@ sub __errors__ {
     return @errors;
 }
 
-sub requires_interpreters_classes {
-    my $self = shift;
-    my @interpreters;
-    for my $interpreter_name ($self->requires_interpreters) {
-        push @interpreters, Genome::VariantReporting::Framework::Factory->get_class('interpreters', $interpreter_name);
-    }
-    return @interpreters;
-}
-
 sub initialize {
     my $self = shift;
     my $output_dir = shift;
 
     $self->SUPER::initialize($output_dir);
-    my $legend_fh = Genome::Sys->open_file_for_writing(File::Spec->join($output_dir, $self->file_name . '.legend.tsv'));
-    $self->_legend_fh($legend_fh);
-    $self->write_legend_file();
+    if ($self->generate_legend_file) {
+        my $legend_fh = Genome::Sys->open_file_for_writing(File::Spec->join($output_dir, $self->file_name . '.legend.tsv'));
+        $self->_legend_fh($legend_fh);
+        $self->write_legend_file();
+    }
     $self->print_headers();
 }
 
 sub finalize {
     my $self = shift;
     $self->SUPER::finalize(@_);
-    $self->_legend_fh->close;
+    if ($self->generate_legend_file) {
+        $self->_legend_fh->close;
+    }
     return
 }
 
@@ -96,10 +94,10 @@ sub print_headers {
 sub available_fields_dict {
     my $self = shift;
 
-    my @interpreters = $self->requires_interpreters_classes;
+    my @interpreters = values %{$self->interpreters};
     my %available_fields;
     for my $interpreter (@interpreters) {
-        for my $field ($self->available_fields_for_interpreter($interpreter)) {
+        for my $field ($interpreter->available_fields) {
             if (defined $available_fields{$field}) {
                 die $self->error_message("Fields are not unique. Field: %s, Interpreters: %s and %s",
                     $field, $interpreter->name, $available_fields{$field}->{interpreter});
@@ -114,13 +112,6 @@ sub available_fields_dict {
 }
 Memoize::memoize('available_fields_dict');
 
-sub available_fields_for_interpreter {
-    my $self = shift;
-    my $interpreter = shift;
-
-    return $interpreter->available_fields();
-}
-
 # Default report method
 # Prints the fields in order of the headers.
 # Overwrite in child class if different behavior desired.
@@ -130,21 +121,22 @@ sub report {
 
     my %fields = $self->available_fields_dict();
     for my $allele (keys %{$interpretations->{($self->requires_interpreters)[0]}}) {
+        my @outputs;
         for my $header ($self->headers()) {
             my $interpreter = $fields{$header}->{interpreter};
             my $field = $fields{$header}->{field};
 
             # If we don't have an interpreter that provides this field, handle it cleanly if the field is known unavailable
             if ($self->header_is_unavailable($header)) {
-                $self->_output_fh->print( $self->_format() . "\t");
+                push @outputs, $self->_format();
             } elsif ($interpreter) {
-                $self->_output_fh->print($self->_format($interpretations->{$interpreter}->{$allele}->{$field}) . "\t");
+                push @outputs, $self->_format($interpretations->{$interpreter}->{$allele}->{$field});
             } else {
                 # We use $header here because $field will be undefined due to it not being in an interpreter
                 die $self->error_message("Field (%s) is not available from any of the interpreters provided", $header);
             }
         }
-        $self->_output_fh->print("\n");
+        $self->_output_fh->print(join($self->delimiter, @outputs) . "\n");
     }
 }
 

@@ -23,7 +23,7 @@ use Exporter 'import';
 
 our @EXPORT_OK = qw(get_build succeed_build compare_directories);
 my $TEST_DIR = __FILE__.".d";
-my $PROVIDER_TEST_DIR = Genome::Utility::Test->data_dir("Genome::VariantReporting::Framework::Component::ResourceProvider", "v3");
+my $PROVIDER_TEST_DIR = Genome::Utility::Test->data_dir("Genome::VariantReporting::Framework::Component::RuntimeTranslations", "v3");
 
 sub _get_pp {
     return Genome::Test::Factory::ProcessingProfile::SomaticValidation->setup_object();
@@ -70,7 +70,7 @@ sub get_build {
             into => "Genome::Model::Build::ImportedVariationList",
             as => "snvs_vcf",
             code => sub {
-                return File::Spec->join($TEST_DIR, "dbsnp.vcf");
+                return File::Spec->join($TEST_DIR, "dbsnp_nhlbi.vcf");
             },
         }
     );
@@ -112,7 +112,7 @@ sub get_build {
             as => "merged_alignment_result",
             code => sub {
                 my $self = shift;
-                if ($self->subject->name eq "TEST-patient1-somval_tumor1") {
+                if ($self->tumor_sample->name eq "TEST-patient1-somval_tumor1") {
                     return $alignment_result;
                 }
                 else {

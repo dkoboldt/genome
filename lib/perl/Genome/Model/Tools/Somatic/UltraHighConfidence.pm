@@ -44,7 +44,7 @@ class Genome::Model::Tools::Somatic::UltraHighConfidence {
         },
         'reference' => {
             type => 'String',
-            example_values => ['/gscmnt/839/info/medseq/reference_sequences/NCBI-human-build36/all_sequences.fa'],
+            example_values => ['/gscmnt/sata420/info/reference_sequences/Homo_sapiens.NCBI36.45.dna.aml/all_sequences.fa'],
             is_optional => 1,
             is_input => 1,
             doc => 'Reference sequence to use',
@@ -113,7 +113,7 @@ class Genome::Model::Tools::Somatic::UltraHighConfidence {
         # Make workflow choose 64 bit blades
         lsf_resource => {
             is_param => 1,
-            default_value => 'rusage[mem=4000,tmp=1000] select[type==LINUX64 && tmp>1000] span[hosts=1]',
+            default_value => 'rusage[mem=4000,tmp=1000] select[tmp>1000] span[hosts=1]',
         },
         lsf_queue => {
             is_param => 1,
@@ -302,7 +302,7 @@ sub run_filter {
 
     print "Running bam-readcounts on tumor BAM...\n";
     
-    my $tumor_rv = Genome::Model::Tools::Sam::Readcount->execute(
+    my $tumor_rc = Genome::Model::Tools::Sam::Readcount->execute(
         reference_fasta => $self->reference,
         bam_file => $self->tumor_bam_file,
         minimum_base_quality => 15,
@@ -313,7 +313,7 @@ sub run_filter {
 
     print "Running bam-readcounts on normal BAM...\n";
 
-    my $normal_rv = Genome::Model::Tools::Sam::Readcount->execute(
+    my $normal_rc = Genome::Model::Tools::Sam::Readcount->execute(
         reference_fasta => $self->reference,
         bam_file => $self->normal_bam_file,
         minimum_base_quality => 15,
@@ -322,7 +322,7 @@ sub run_filter {
         use_version => $self->bam_readcount_version,
     );
 
-    unless($tumor_rv and $normal_rv) {
+    unless($tumor_rc->result and $normal_rc->result) {
         $self->error_message("bam-readcounts failed");
         return;
     }
