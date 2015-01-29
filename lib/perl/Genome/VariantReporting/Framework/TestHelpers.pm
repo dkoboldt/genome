@@ -20,6 +20,7 @@ use Genome::File::Vcf::Differ;
 use Genome::Utility::Test;
 use File::Slurp qw(write_file);
 use Genome::Utility::Test qw(compare_ok);
+use File::Copy qw();
 
 use Exporter 'import';
 
@@ -30,6 +31,7 @@ our @EXPORT_OK = qw(
     get_reference_build
     get_translation_provider_with_vep
     test_dag_xml
+    test_xml
     test_dag_execute
     test_expert_is_registered
 );
@@ -134,17 +136,40 @@ sub get_sample_name {
 }
 
 sub test_dag_xml {
-    my ($dag, $expected_xml) = @_;
+    my ($dag, $test_file) = @_;
     my $xml_path = Genome::Sys->create_temp_file_path;
     write_file($xml_path, $dag->get_xml);
-    compare_ok($expected_xml, $xml_path, "Xml looks as expected");
+
+    return test_xml($xml_path, $test_file);
+}
+
+sub test_xml {
+    my ($xml_path, $test_file) = @_;
+
+    my $expected_xml_path = File::Spec->join($test_file . '.d', 'expected.xml');
+
+    if ($ENV{GENERATE_TEST_DATA}) {
+        File::Copy::copy($xml_path, $expected_xml_path);
+    }
+    compare_ok($expected_xml_path, $xml_path, "Xml looks as expected");
+    return;
 }
 
 sub test_dag_execute {
-    my ($dag, $expected_vcf, $input_vcf, $provider, $variant_type, $plan) = @_;
+    my ($dag, $expected_vcf, $input_vcf, $provider, $variant_type, $test_file) = @_;
+
+    my $plan_file = File::Spec->join($test_file . '.d', 'plan.yaml');
+    my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->
+        create_from_file($plan_file);
+    note sprintf("Validating plan (%s)", $plan_file);
+    $plan->validate();
+    note "Validating plan against translations provider";
+    $plan->validate_translation_provider($provider);
+    note "Translating plan";
+    $plan->translate($provider->translations);
+    note "Launching workflow";
     my $output = $dag->execute(
         input_vcf => $input_vcf,
-        provider_json => $provider->as_json,
         variant_type => $variant_type,
         plan_json => $plan->as_json,
     );

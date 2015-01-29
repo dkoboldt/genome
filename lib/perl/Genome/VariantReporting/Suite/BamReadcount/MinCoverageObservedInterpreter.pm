@@ -9,6 +9,7 @@ use Scalar::Util qw( looks_like_number );
 class Genome::VariantReporting::Suite::BamReadcount::MinCoverageObservedInterpreter {
     is => ['Genome::VariantReporting::Framework::Component::Interpreter', 'Genome::VariantReporting::Framework::Component::WithManySampleNames'],
     has => [],
+    doc => 'Calculate the minimum coverage (ref_count+var_count) between all the samples specified',
 };
 
 sub name {
@@ -32,10 +33,15 @@ sub _interpret_entry {
 
     my %coverages;
     for my $sample_name ($self->sample_names) {
-        my $interpreter = Genome::VariantReporting::Suite::BamReadcount::VafInterpreter->create(sample_name => $sample_name);
+        my $interpreter = Genome::VariantReporting::Suite::BamReadcount::VafInterpreter->create(
+            sample_name => $sample_name,
+            sample_name_label => $self->sample_name_labels->{$sample_name},
+        );
         my %result = $interpreter->interpret_entry($entry, $passed_alt_alleles);
         for my $alt_allele (@$passed_alt_alleles) {
-            $coverages{$alt_allele}->{coverage}->{$sample_name} = $result{$alt_allele}->{ref_count} + $result{$alt_allele}->{var_count};
+            my $ref_count = $result{$alt_allele}->{$interpreter->create_sample_specific_field_name('ref_count')};
+            my $var_count = $result{$alt_allele}->{$interpreter->create_sample_specific_field_name('var_count')};
+            $coverages{$alt_allele}->{coverage}->{$sample_name} = $ref_count + $var_count;
         }
     }
 

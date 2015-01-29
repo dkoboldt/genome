@@ -56,11 +56,13 @@ sub connected_run_operation {
 
     my $run_operation = $self->run_operation;
     $dag->add_operation($run_operation);
-    $dag->connect_input(
-        input_property => 'input_vcf',
-        destination => $run_operation,
-        destination_property => 'input_vcf',
-    );
+    for my $name qw(process_id input_vcf) {
+        $dag->connect_input(
+            input_property => $name,
+            destination => $run_operation,
+            destination_property => $name,
+        );
+    }
     for my $name qw(output_result output_vcf) {
         $dag->connect_output(
             output_property => $name,
@@ -74,7 +76,7 @@ sub connected_run_operation {
 sub adaptor_operation {
     my $self = shift;
     return Genome::WorkflowBuilder::Command->create(
-        name => 'Get inputs from provider and plan',
+        name => 'Get inputs from plan',
         command => $self->adaptor_class,
     );
 }
@@ -84,7 +86,7 @@ sub connected_adaptor_operation {
 
     my $adaptor_operation = $self->adaptor_operation;
     $dag->add_operation($adaptor_operation);
-    for my $name qw(provider_json variant_type plan_json) {
+    for my $name qw(variant_type plan_json) {
         $dag->connect_input(
             input_property => $name,
             destination => $adaptor_operation,
@@ -102,7 +104,6 @@ sub dag {
 
     # DAG INPUTS:
     #   input_vcf
-    #   provider_json
     #   variant_type
     #   plan_json
     #

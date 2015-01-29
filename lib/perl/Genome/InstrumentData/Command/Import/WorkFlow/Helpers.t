@@ -1,4 +1,4 @@
-#! /gsc/bin/perl
+#!/usr/bin/env genome-perl
 
 BEGIN {
     $ENV{UR_COMMAND_DUMP_STATUS_MESSAGES} = 1;
@@ -28,6 +28,40 @@ my @source_files = (
     $ENV{GENOME_TEST_INPUTS} . '/Genome-InstrumentData-Command-Import-Basic/fastq-2.fastq',
 );
 
+# source file retrieval
+throws_ok(sub{ $helpers->source_file_retrieval_method(); }, qr/No source file to get retrieval method!/, 'source_file_retrieval_method fails w/o source file');
+my %source_files_and_retrieval_methods = (
+    'https://cghub.ucsc.edu/UUID' => 'cg hub',
+    'file://some/url.edu/file' => 'remote url',
+    'http://some.url.edu/file' => 'remote url',
+    '/some/local/file' => 'local disk',
+);
+for my $sf ( keys %source_files_and_retrieval_methods ) {
+    is(
+        $helpers->source_file_retrieval_method($sf),
+        $source_files_and_retrieval_methods{$sf},
+        "source file $sf retrieval method is '$source_files_and_retrieval_methods{$sf}'",
+    );
+}
+
+throws_ok(
+    sub{ $helpers->source_files_retrieval_method(); },
+    qr/No source files to get retrieval method!/,
+    'source_file_retrieval_methods fails w/o source file',
+);
+throws_ok(
+    sub{ $helpers->source_files_retrieval_method(keys %source_files_and_retrieval_methods); },
+    qr/Mixed file retrieval methods for source files! /,
+    'source_files_retrieval_method fails w/ many retrieval methods',
+);
+my @source_files_from_remote_url = grep { $source_files_and_retrieval_methods{$_} eq 'remote url' } keys %source_files_and_retrieval_methods;
+is(@source_files_from_remote_url, 2, '2 files from reote url');
+is(
+    $helpers->source_files_retrieval_method(@source_files_from_remote_url),
+    'remote url',
+    "source_file_retrieval_methods is 'remote url'",
+);
+
 # source file format
 ok(!eval{$helpers->source_file_format()}, 'format for no source file fails');
 ok(!$helpers->source_file_format('source.duh'), 'no format for unknown source file');
@@ -53,7 +87,7 @@ ok(!eval{$helpers->size_of_source_file;}, 'failed to get size for source file w/
 ok(!eval{$helpers->size_of_remote_file;}, 'failed to get size for remote file w/o remote file');
 
 ok(!eval{$helpers->kilobytes_required_for_processing_of_source_files;}, 'failed to get kilobytes needed for processing w/o source files');
-is($helpers->kilobytes_required_for_processing_of_source_files(@source_files), 738, 'kilobytes needed for processing source files');
+is($helpers->kilobytes_required_for_processing_of_source_files(@source_files), 746, 'kilobytes needed for processing source files');
 
 # headers
 ok(!eval{$helpers->load_headers_from_bam;}, 'failed to get headers w/o bam');
@@ -218,5 +252,44 @@ is($errors[0]->desc, 'Must be greater than 0 and less than 1! 0', 'correct error
 @errors = $helpers->is_downsample_ratio_invalid('1');
 ok(@errors, 'errors for downsample_ratio of 1');
 is($errors[0]->desc, 'Must be greater than 0 and less than 1! 1', 'correct error desc for downsample_ratio of 1');
+
+# is_bam_paired_end
+throws_ok(sub{ $helpers->is_bam_paired_end(); }, qr/No bam path given to is_bam_paired_end!/, 'is_bam_paired_end fails w/o bam');
+throws_ok(sub{ $helpers->is_bam_paired_end('does_not_exist'); }, qr/Bam path given to is_bam_paired_end does not exist!/, 'is_bam_paired_end fails w/ non existing bam');
+my $data_dir2 = File::Spec->join($test_dir, 'bam-rg-multi', 'v4');
+my $bam_path2 = File::Spec->join($data_dir2, '2883581797.paired.bam');
+my $is_paired_end = $helpers->is_bam_paired_end($bam_path2);
+is($is_paired_end, 1, "bam $bam_path2 is paired end");
+$bam_path2 = File::Spec->join($data_dir2, '2883581797.singleton.bam');
+$is_paired_end = $helpers->is_bam_paired_end($bam_path2);
+is($is_paired_end, 0, "bam $bam_path2 is not paired end");
+
+# update bam
+my $instdata = Genome::InstrumentData::Imported->__define__(
+    id => -1111,
+);
+ok($instdata, '__define__ instdata');
+Sub::Install::reinstall_sub({
+        code => sub{ return $bam_path2; },
+        into => "Genome::InstrumentData::Imported",
+        as   => 'bam_path',
+    });
+$instdata->add_attribute( # test removal
+    attribute_label => 'read_length',
+    attribute_value => -1,
+    nomenclature => 'WUGC',
+);
+ok($ds_attr, '__define__ downsample attr for instdata 3');
+throws_ok(sub{ $helpers->update_bam_metrics_for_instrument_data(); }, qr/No instrument data given to update bam for instrument data!/, 'update_bam_metrics_for_instrument_data fails w/o instdata');
+ok($helpers->update_bam_metrics_for_instrument_data($instdata, $bam_path2), 'update_bam_metrics_for_instrument_data');
+my %expected_attrs = (
+    bam_path => $bam_path2,
+    read_count => 94,
+    read_length => 100,
+    is_paired_end => 0,
+);
+for my $attr (qw/ bam_path is_paired_end read_count read_length /) {
+    is($instdata->attributes(attribute_label => $attr)->attribute_value, $expected_attrs{$attr}, "$attr set")
+}
 
 done_testing();

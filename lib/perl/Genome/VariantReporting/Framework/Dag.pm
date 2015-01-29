@@ -22,7 +22,7 @@ sub generate_dag {
     );
 
     my $last_expert_op = connect_experts($dag, $plan);
-    connect_report_generator($dag, $last_expert_op);
+    connect_reports($dag, $last_expert_op, $plan);
 
     return $dag;
 }
@@ -63,8 +63,8 @@ sub connect_to_dag {
     });
 
     $p{dag}->add_operation($p{target});
-    for my $name qw(provider_json variant_type plan_json) {
-        if (in($name, $p{target}->input_properties)) {
+    for my $name qw(process_id variant_type plan_json) {
+        if ($p{target}->is_input_property($name)) {
             $p{dag}->connect_input(
                 input_property => $name,
                 destination => $p{target},
@@ -101,38 +101,35 @@ sub experts {
     } @unsorted_experts;
 }
 
-sub connect_report_generator {
-    my ($dag, $last_expert_op) = validate_pos(@_, 1, 1);
+sub connect_reports {
+    my ($dag, $last_expert_op, $plan) = validate_pos(@_, 1, 1, 1);
 
-    my $report_generator_op = Genome::WorkflowBuilder::Command->create(
-        name => 'Generate Reports',
-        command => 'Genome::VariantReporting::Framework::ReportGenerator',
-    );
-    connect_to_previous(
-        dag => $dag,
-        previous => $last_expert_op,
-        target => $report_generator_op,
-    );
-    connect_to_dag(
-        dag => $dag,
-        target => $report_generator_op,
-    );
+    for my $report_plan ($plan->report_plans) {
+        my $name = $report_plan->name;
+        my $report_op = Genome::WorkflowBuilder::Command->create(
+            name => sprintf('Generate Report (%s)', $name),
+            command => 'Genome::VariantReporting::Framework::GenerateReport',
+        );
+        $report_op->declare_constant(
+            report_name => $name,
+            label => $name,
+        );
+        connect_to_previous(
+            dag => $dag,
+            previous => $last_expert_op,
+            target => $report_op,
+        );
+        connect_to_dag(
+            dag => $dag,
+            target => $report_op,
+        );
 
-    $dag->connect_input(
-        input_property => 'translations',
-        destination => $report_generator_op,
-        destination_property => 'translations',
-    );
-    $dag->connect_input(
-        input_property => 'output_directory',
-        destination => $report_generator_op,
-        destination_property => 'output_directory',
-    );
-    $dag->connect_output(
-        output_property => 'output_directory',
-        source => $report_generator_op,
-        source_property => 'output_directory',
-    );
+        $dag->connect_output(
+            output_property => sprintf('output_result (%s)', $name),
+            source => $report_op,
+            source_property => 'output_result',
+        );
+    }
 }
 
 

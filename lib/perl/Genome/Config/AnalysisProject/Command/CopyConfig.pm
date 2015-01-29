@@ -59,16 +59,32 @@ sub _copy_config_profile_items_to_project {
             Genome::Config::Profile::Item->create(
                 analysis_project => $analysis_project,
                 analysis_menu_item => $original_config_item->analysis_menu_item,
+                status => $original_config_item->status,
             );
         } else {
             Genome::Config::Profile::Item->create_from_file_path(
                 analysis_project => $analysis_project,
                 file_path => $original_config_item->file_path,
+                status => $original_config_item->status,
             );
         }
     }
 
     return 1;
+}
+
+sub __errors__ {
+    my $self = shift;
+    my @errors = $self->SUPER::__errors__(@_);
+    my $status = $self->to_project->status;
+    unless(grep{$_ eq $status} ("Pending", "Hold", "In Progress", "Template")){
+        push @errors, UR::Object::Tag->create(
+            type => 'error',
+            properties => ['to_project'],
+            desc => "Can't add config file to analysis project with status: $status"
+        );
+    }
+    return @errors;
 }
 
 1;

@@ -29,13 +29,13 @@ sub get_sample_and_bam_map {
     my $self = shift;
 
     return (
-        $self->discovery->tumor_sample->name  => $self->discovery->tumor_bam,
+        sprintf('Normal(%s)', $self->discovery->tumor_sample->name)  => $self->discovery->tumor_bam,
     );
 }
 
 sub get_translations {
     my $self = shift;
-    my %translations;
+    my %translations = %{$self->common_translations};
     $translations{normal} = $self->discovery->tumor_sample->name;
     if ($self->gold_sample_name) {
         $translations{gold} = $self->gold_sample_name;

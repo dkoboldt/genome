@@ -4,11 +4,16 @@ use strict;
 use warnings;
 use Genome;
 use Genome::VariantReporting::Suite::BamReadcount::VafInterpreter;
-use Genome::VariantReporting::Suite::BamReadcount::VafInterpreterHelpers qw(basic_available_fields many_samples_field_descriptions);
+use Genome::VariantReporting::Suite::BamReadcount::VafInterpreterHelpers qw(
+    many_samples_field_descriptions
+    many_libraries_field_descriptions);
 
 class Genome::VariantReporting::Suite::BamReadcount::ManySamplesVafInterpreter {
-    is => ['Genome::VariantReporting::Framework::Component::Interpreter', 'Genome::VariantReporting::Framework::Component::WithManySampleNames'],
+    is => ['Genome::VariantReporting::Framework::Component::Interpreter',
+        'Genome::VariantReporting::Framework::Component::WithManySampleNames',
+        'Genome::VariantReporting::Framework::Component::WithManyLibraryNames'],
     has => [],
+    doc => 'Calculate the variant allele frequency, number of reads supporting the reference, and number of reads supporting variant for multiple samples and their libraries',
 };
 
 sub name {
@@ -21,7 +26,8 @@ sub requires_annotations {
 
 sub field_descriptions {
     my $self = shift;
-    return many_samples_field_descriptions([$self->sample_names]);
+    return (many_samples_field_descriptions($self),
+    many_libraries_field_descriptions($self));
 }
 
 sub _interpret_entry {
@@ -31,12 +37,16 @@ sub _interpret_entry {
 
     my %return_values;
     for my $sample_name ($self->sample_names) {
-        my $interpreter = Genome::VariantReporting::Suite::BamReadcount::VafInterpreter->create(sample_name => $sample_name);
+        my $interpreter = Genome::VariantReporting::Suite::BamReadcount::VafInterpreter->create(
+            sample_name => $sample_name,
+            sample_name_label => $self->sample_name_labels->{$sample_name},
+            library_names => [$self->library_names],
+            library_name_labels => $self->library_name_labels,
+        );
         my %result = $interpreter->interpret_entry($entry, $passed_alt_alleles);
         for my $alt_allele (@$passed_alt_alleles) {
-            for my $vaf_field (basic_available_fields()) {
-                my $sample_specific_field_name = $self->create_sample_specific_field_name($vaf_field, $sample_name);
-                $return_values{$alt_allele}->{$sample_specific_field_name} = $result{$alt_allele}->{$vaf_field};
+            for my $field_name (keys %{$result{$alt_allele}}) {
+                $return_values{$alt_allele}->{$field_name} = $result{$alt_allele}->{$field_name};
             }
         }
     }

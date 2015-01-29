@@ -321,12 +321,13 @@ sub _get_items_to_process {
     if ($self->instrument_data) {
         return Genome::Config::AnalysisProject::InstrumentDataBridge->get(
             instrument_data_id => [map { $_->id } $self->instrument_data],
+            'analysis_project.status' => 'In Progress',
             -hint => ['analysis_project', 'instrument_data', 'instrument_data.sample']
         );
     } else {
         return Genome::Config::AnalysisProject::InstrumentDataBridge->get(
             status => ['new', 'failed'],
-            'analysis_project.status not in' => ['Hold','Pending'],
+            'analysis_project.status' => 'In Progress',
             -hint => ['analysis_project', 'instrument_data', 'instrument_data.sample'],
             -order => ['fail_count'],
             -limit => $self->limit,
@@ -344,7 +345,7 @@ sub _assign_model_to_analysis_project {
     die('Must specify an analysis project and a model!') unless $analysis_project && $model && $config_profile_item;
 
     $analysis_project->add_model_bridge(model => $model, config_profile_item => $config_profile_item) if $created_new;
-    return $analysis_project->model_group->assign_models($model);
+    return 1;
 }
 
 sub _update_models_for_associated_projects {
@@ -369,8 +370,9 @@ sub _update_models_for_associated_projects {
 
 sub _lock {
     unless ($ENV{UR_DBI_NO_COMMIT}) {
-        my $lock_var = $ENV{GENOME_LOCK_DIR} . '/genome_config_command_configure-queued-instrument-data/lock';
-        my $lock = Genome::Sys->lock_resource(resource_lock => $lock_var, max_try => 1);
+        my $lock_var = 'genome_config_command_configure-queued-instrument-data/lock';
+        my $lock = Genome::Sys->lock_resource(resource_lock => $lock_var,
+            scope => 'site', max_try => 1);
 
         die('Unable to acquire the lock! Is ConfigureQueuedInstrumentData already running or did it exit uncleanly?')
             unless $lock;

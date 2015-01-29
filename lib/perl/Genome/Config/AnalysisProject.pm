@@ -12,21 +12,12 @@ class Genome::Config::AnalysisProject {
         id => { is => 'Text', len => 64 },
     ],
     has => [
-        _model_group_id => {
-            is => 'Text',
-            len => 64,
-            column_name => 'model_group_id',
-        },
-        model_group => {
-            is => 'Genome::ModelGroup',
-            id_by => '_model_group_id',
-        },
         name => { is => 'Text' },
         status => {
             is => 'Text',
             len => 255,
             default_value => 'Pending',
-            valid_values => [ "Pending", "Approved", "In Progress", "Completed", "Archived", "Hold" ],
+            valid_values => [ 'Pending', 'In Progress', 'Completed', 'Archived', 'Hold', 'Template' ],
         },
         is_cle => {
             is => 'Boolean',
@@ -93,42 +84,22 @@ sub __display_name__ {
     return sprintf('%s (%s)', $self->name, $self->id);
 }
 
-sub create {
-    my $class = shift;
-    my $self = $class->SUPER::create(@_);
-    eval {
-        $self->_create_model_group();
-        $self->_set_run_as();
-    };
-    if(my $error = $@) {
-        $self->delete();
-        die($error);
-    }
-    return $self;
-}
-
 sub delete {
     my $self = shift;
-    eval {
-        if ($self->model_group) {
-            $self->model_group->delete();
-        }
-        for ($self->config_items) {
-            $_->delete();
-        }
-        for ($self->model_bridges) {
-            $_->delete();
-        }
-        for ($self->analysis_project_bridges) {
-            $_->delete();
-        }
-        for ($self->subject_mappings) {
-            $_->delete();
-        }
-    };
-    if(my $error = $@) {
-        die($error);
+
+    my $msg = 'Cannot delete analysis project %s because it has %s.';
+    if ($self->model_bridge_set->count) {
+        die $self->error_message($msg, $self->__display_name__, 'models');
     }
+    if ($self->analysis_project_bridge_set->count) {
+        die $self->error_message($msg, $self->__display_name__, 'instrument data');
+    }
+
+    my @events = Genome::Timeline::Event::AnalysisProject->get(analysis_project => $self);
+    for ($self->config_items, $self->subject_mappings, @events) {
+        $_->delete();
+    }
+
     return $self->SUPER::delete();
 }
 
@@ -142,25 +113,6 @@ sub get_configuration_profile {
     }
 
     return $self->configuration_profile;
-}
-
-sub _create_model_group {
-    my $self = shift;
-    my $mg_name = sprintf("%s - %s - Analysis Project", $self->name, $self->id);
-    my $mg = Genome::ModelGroup->create(name => $mg_name);
-    $self->model_group($mg);
-}
-
-sub _set_run_as {
-    my $self = shift;
-
-    return if $self->run_as;
-
-    if ($self->is_cle) {
-        $self->run_as('cle');
-    } else {
-        $self->run_as('apipe-builder');
-    }
 }
 
 sub _is_updated {

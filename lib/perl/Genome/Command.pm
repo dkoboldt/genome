@@ -6,7 +6,7 @@ use warnings;
 use Genome;
 
 class Genome::Command {
-    is => 'Command::Tree',
+    is => 'Genome::Command::Base',
 };
 
 # This map allows the top-level genome commands to be whatever
@@ -25,6 +25,7 @@ my %command_map = (
     'model' => 'Genome::Model::Command',
     'model-group' => 'Genome::ModelGroup::Command',
     'population-group' => 'Genome::PopulationGroup::Command',
+    'process' => 'Genome::Process::Command',
     'processing-profile' => 'Genome::ProcessingProfile::Command',
     'project' => 'Genome::Project::Command',
     'project-part' => 'Genome::ProjectPart::Command',

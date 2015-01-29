@@ -97,11 +97,15 @@ class Genome::Model::Command::Define::ImportedReferenceSequence {
             doc => 'Indicates if this reference could be rederived from other internal results or if it is an external import',
         },
     ],
-    has_transient => [
+    has_transient_optional => [
         result_build_id => {
             is => 'Text',
-            is_optional => 1,
             doc => 'newly created build ID of reference sequence model',
+        },
+        analysis_projects => {
+            is => 'Genome::Config::AnalysisProject',
+            is_many => 1,
+            doc => 'Analysis Project to which to associate the new model (if any)',
         },
     ],
 };
@@ -125,7 +129,7 @@ sub _prompt_to_continue {
         $self->warning_message($str);
         return 1;
     } else {
-        my $answer = Genome::Command::Base->_ask_user_question($str . " Continue anyway?");
+        my $answer = Command::V2->_ask_user_question($str . " Continue anyway?");
 
         if($answer and $answer eq 'yes') {
             $self->status_message('Continuing.');
@@ -307,6 +311,9 @@ sub _get_or_create_model {
             'name' => $self->model_name,
             'is_rederivable' => $self->is_rederivable,
         );
+        if($self->analysis_projects) {
+            $model->add_analysis_project_bridge(analysis_project => $self->analysis_projects);
+        }
 
         if($model) {
             if(my @problems = $model->__errors__){

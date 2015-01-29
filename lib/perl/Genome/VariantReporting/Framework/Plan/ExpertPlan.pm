@@ -19,17 +19,15 @@ sub category {
     'experts';
 }
 
-sub adaptor_object {
+sub needed_translations {
     my $self = shift;
-    my $adaptor_class = $self->object->adaptor_class;
-    return $adaptor_class->create($self->adaptor_params);
+    return Set::Scalar->new(map {$self->adaptor_params->{$_}}
+        $self->get_class->adaptor_class->required_translated_input_names);
 }
 
-sub __translation_errors__ {
-    my $self = shift;
-    my $provider = shift;
-    my @errors = $self->adaptor_object->_translation_errors($provider->translations, $self->adaptor_object->name);
-    return @errors;
+sub translate {
+    my ($self, $translations) = @_;
+    return $self->_translate($translations, 'adaptor_params', $self->get_class->adaptor_class);
 }
 
 # ExpertPlans don't have any params but have adaptor_params instead
@@ -72,7 +70,7 @@ sub __class_errors__ {
 sub __object_errors__ {
     my $self = shift;
     my @errors = $self->SUPER::__object_errors__;
-    push @errors, $self->object->adaptor_class->__planned_output_errors__($self->adaptor_params);
+    push @errors, $self->get_class->adaptor_class->__planned_output_errors__($self->adaptor_params);
     return @errors;
 }
 

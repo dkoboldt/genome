@@ -5,6 +5,7 @@ use warnings;
 
 use version 0.77;
 use Genome;
+use Set::Scalar;
 
 class Genome::Model::Event::Build::ReferenceAlignment::BamQc {
     is  => ['Genome::Model::Event'],
@@ -42,8 +43,7 @@ sub execute {
     my $build = $self->build;
     my $pp    = $build->processing_profile;
 
-    if ($pp->read_aligner_name eq 'imported') {
-        $self->warning_message('Skip BamQc step for imported alignment bam');
+    if ($self->_should_skip_bam_qc($pp)) {
         return 1;
     }
 
@@ -65,7 +65,15 @@ sub params_for_result {
 
     unless ($self->_alignment_result) {
         my $instrument_data_input = $self->instrument_data_input;
-        my ($align_result) = $build->alignment_results_for_instrument_data($instrument_data_input->value);
+
+        my %segment_info;
+        if(defined $self->instrument_data_segment_id) {
+            for my $key (qw(instrument_data_segment_id instrument_data_segment_type)) {
+                $segment_info{$key} = $self->$key;
+            }
+        }
+
+        my ($align_result) = $pp->results_for_instrument_data_input($instrument_data_input, %segment_info);
 
         unless ($align_result) {
             die $self->error_message('No alignment result found for build: '. $build->id);
@@ -142,15 +150,32 @@ sub _select_error_rate_version_for_pp {
         and $pp->can('read_aligner_version')
         and defined $pp->read_aligner_name
         and defined $pp->read_aligner_version
-        and ($pp->read_aligner_name eq 'bwamem')
+        and ($pp->read_aligner_name =~ /^bwamem/)
     ) {
         my $mem_version = $self->_bwa_mem_version_object($pp->read_aligner_version);
         if($mem_version > $self->_bwa_mem_version_object("0.7.5")) {
             $error_rate_version = '1.0a2';
         }
     }
-    
+
     return $error_rate_version;
+}
+
+sub _should_skip_bam_qc {
+    my ($self, $pp) = @_;
+
+    if ($pp->can('read_aligner_name')) {
+        my $aligner = $pp->read_aligner_name;
+        if ($self->_aligner_blacklist->has($aligner)) {
+            $self->warning_message("Skipping BamQc because aligner is '$aligner'");
+            return 1;
+        }
+    }
+    return 0;
+}
+
+sub _aligner_blacklist {
+    return Set::Scalar->new(qw(imported bsmap));
 }
 
 sub _bwa_mem_version_object {

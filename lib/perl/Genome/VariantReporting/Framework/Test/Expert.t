@@ -30,13 +30,7 @@ Genome::Sys->rsync_directory(
 
 my $expert = $pkg->create();
 my $dag = $expert->dag();
-my $expected_xml = File::Spec->join($test_dir, 'expected.xml');
-test_dag_xml($dag, $expected_xml);
-
-my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->create_from_file(
-    File::Spec->join($test_dir, 'plan.yaml'),
-);
-$plan->validate();
+test_dag_xml($dag, __FILE__);
 
 my $variant_type = 'snvs';
 my $expected_vcf = File::Spec->join($test_dir, "expected.vcf");
@@ -44,6 +38,6 @@ my $input_vcf = File::Spec->join($test_dir, "input.vcf.gz");
 
 my $provider = Genome::VariantReporting::Framework::Component::RuntimeTranslations->create();
 
-test_dag_execute($dag, $expected_vcf, $input_vcf, $provider, $variant_type, $plan);
+test_dag_execute($dag, $expected_vcf, $input_vcf, $provider, $variant_type, __FILE__);
 
 done_testing();

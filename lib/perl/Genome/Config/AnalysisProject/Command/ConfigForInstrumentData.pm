@@ -6,7 +6,7 @@ use warnings;
 use Genome;
 
 class Genome::Config::AnalysisProject::Command::ConfigForInstrumentData {
-    is => ['Command::V2','Genome::Command::ColorMixin'],
+    is => ['Genome::Command::WithColor'],
     has => [
         instrument_data => {
             is => 'Genome::InstrumentData',
@@ -20,6 +20,7 @@ class Genome::Config::AnalysisProject::Command::ConfigForInstrumentData {
             doc => 'Display report in color.'
         },
     ],
+    doc => 'compare instdata to AnP configs to show matches, models and mismatches',
 };
 
 sub execute {

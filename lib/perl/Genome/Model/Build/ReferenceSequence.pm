@@ -84,10 +84,35 @@ class Genome::Model::Build::ReferenceSequence {
         combines => {
             is => 'Genome::Model::Build::ReferenceSequence',
             doc => 'If specified, merges several other references into one.', 
+            is_many => 1,
+        },
+    ],
+    has_many_optional => [
+        convertible_to_bridges => {
+            is => 'Genome::Model::Build::ReferenceSequence::Converter',
+            reverse_as => 'source_reference_build',
+            doc => 'converters which convert this reference to other references',
+        },
+        convertible_to => {
+            is => 'Genome::Model::Build::ReferenceSequence',
+            via => 'convertible_to_bridges',
+            to => 'destination_reference_build',
+            doc => 'other references to which this reference can be converted',
+        },
+        convertible_from_bridges => {
+            is => 'Genome::Model::Build::ReferenceSequence::Converter',
+            reverse_as => 'destination_reference_build',
+            doc => 'converters which convert other references to this reference',
+        },
+        convertible_from => {
+            is => 'Genome::Model::Build::ReferenceSequence',
+            via => 'converters_from_bridges',
+            to => 'source_reference_build',
+            doc => 'other references that can be converted to this reference',
         },
     ],
 
-    doc => 'a specific version of a reference sequence, with cordinates suitable for annotation',
+    doc => 'a specific version of a reference sequence',
 };
 
 
@@ -352,7 +377,7 @@ sub full_consensus_path {
 }
 
 #This is for samtools faidx output that can be used as ref_list for
-#SamToBam convertion
+#SamToBam conversion
 sub full_consensus_sam_index_path {
     my $self        = shift;
     my $sam_version = shift;
@@ -369,6 +394,7 @@ sub full_consensus_sam_index_path {
 
         my $lock = Genome::Sys->lock_resource(
             resource_lock => $data_dir.'/lock_for_faidx',
+            scope         => 'unknown',
             max_try       => 2,
         );
         unless ($lock) {
@@ -431,16 +457,21 @@ sub get_sequence_dictionary {
 
     $self->warning_message("No seqdict at path $path.  Creating...");
 
+    my $resource_lock = $seqdict_dir_path."/lock_for_seqdict-$file_type";
     #lock seqdict dir here
     my $lock = Genome::Sys->lock_resource(
-        resource_lock => $seqdict_dir_path."/lock_for_seqdict-$file_type",
+        resource_lock => $resource_lock,
+        scope         => 'unknown',
         max_try       => 2,
     );
 
     # if it couldn't get the lock after 2 tries, pop a message and keep trying as much as it takes
     unless ($lock) {
         $self->status_message("Couldn't get a lock after 2 tries, waiting some more...");
-        $lock = Genome::Sys->lock_resource(resource_lock => $seqdict_dir_path."/lock_for_seqdict-$file_type");
+        $lock = Genome::Sys->lock_resource(
+        resource_lock => $resource_lock,
+            scope => 'unknown',
+        );
         unless($lock) {
             $self->error_message("Failed to lock resource: $seqdict_dir_path");
             return;
@@ -467,7 +498,6 @@ sub get_sequence_dictionary {
             return;
         }
     } else {
-        #my $picard_path = "$ENV{GENOME_SW_LEGACY_JAVA}/samtools/picard-tools-1.04/";
         my $uri = $self->sequence_uri;
         if (!$uri) {
             $self->warning_message("No sequence URI defined on this model!  Using generated default: " . $self->external_url);
@@ -636,7 +666,7 @@ sub local_cache_dir {
 
 sub local_cache_lock {
     my $self = shift;
-    return $self->local_cache_basedir."/LOCK-".$self->id;
+    return "LOCK-".$self->id;
 }
 
 #MOVE TO GENOME::SYS#
@@ -743,6 +773,7 @@ sub verify_or_create_local_cache {
     $self->status_message('Lock name: '.$lock_name);
     my $lock = Genome::Sys->lock_resource(
         resource_lock => $lock_name,
+        scope => 'tgisan',
         max_try => 20, # 20 x 180 sec each = 1hr
         block_sleep => 180,
     );
@@ -858,6 +889,18 @@ sub is_superset_of {
     return $my_chromosomes >= $other_chromosomes;
 }
 
+sub contains {
+    my ($self, $other_refbuild) = @_;
+
+    return 1 if $self eq $other_refbuild;
+
+    if(($self->coordinates_from || '') eq $other_refbuild or $self->is_derived_from($other_refbuild)) {
+        return $self->is_superset_of($other_refbuild);
+    }
+
+    return 0;
+}
+
 # Given a feature list accessor, try to get it from myself or my ancestors
 sub get_feature_list {
     my ($self, $feature_list_accessor, @ancestry_stack) = @_;
@@ -885,6 +928,21 @@ sub get_feature_list {
     } else {
         return $feature_list
     }
+}
+
+sub combined_references {
+    my $class = shift;
+    my @references = @_;
+
+    my $reference_set = Set::Scalar->new(map $_->id, @references);
+
+    my @combined_reference_inputs = Genome::Model::Build::Input->get(name => 'combines', value_id => [$reference_set->members]);
+    my @combined_references = Genome::Model::Build->get([map $_->build_id, @combined_reference_inputs]);
+
+    #filter to only those that combine exactly all our references
+    my @exact_combined_references = grep { $reference_set == Set::Scalar->new(map $_->id, $_->combines) } @combined_references;
+
+    return @exact_combined_references;
 }
 
 1;

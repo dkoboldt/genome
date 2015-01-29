@@ -5,7 +5,7 @@ use warnings;
 
 use feature qw(say);
 
-use List::MoreUtils qw(any uniq);
+use List::MoreUtils qw(any uniq all);
 use Genome;
 
 class Genome::FeatureList::Command::Merge {
@@ -60,37 +60,35 @@ sub execute {
         die $self->error_message('Must provide at least two FeatureLists to combine. Got %s.', scalar(@inputs));
     }
 
-    unless($self->reference) {
-        $self->reference($inputs[0]->reference);
-    }
-    $self->status_message('Using reference: %s', $self->reference->name);
-    $self->validate_list_references_are_compatible($self->reference, @inputs);
-
+    $self->validate_properties_required_for_merge(@inputs);
     my $is_1_based = $self->validate_consistent_starting_base(@inputs);
     my $is_multitracked = $self->validate_consistent_multitrackedness(@inputs);
 
-    my $new_bed_content = $self->combine_bed_content(@inputs);
+    unless($self->reference) {
+        my $reference = $self->find_common_reference_for_lists(@inputs);
+        $self->reference($reference);
+    }
+    $self->status_message('Using reference: %s', $self->reference->name);
+
+    my $new_bed_content = $self->combine_bed_content($self->reference, @inputs);
     my $new_bed_md5 = Genome::Sys->md5sum_data($new_bed_content);
 
-    my $merged_list = $self->find_existing_list($new_bed_md5, $self->name);
-    unless($merged_list) {
-        my $temp_file = Genome::Sys->create_temp_file_path;
-        Genome::Sys->write_file($temp_file, $new_bed_content);
+    my $temp_file = Genome::Sys->create_temp_file_path;
+    Genome::Sys->write_file($temp_file, $new_bed_content);
 
-        my $cmd = Genome::FeatureList::Command::Create->create(
-            name => $self->name,
-            reference => $self->reference,
-            file_path => $temp_file,
-            content_type => 'targeted',
-            format => Genome::FeatureList->_derive_format($is_1_based, $is_multitracked),
-            description => 'generated with `genome feature-list merge`',
-        );
-        unless($merged_list = $cmd->execute) {
-            die $self->error_message('Failed to create FeatureList');
-        }
+    my $cmd = Genome::FeatureList::Command::Import->create(
+        name => $self->name,
+        reference => $self->reference,
+        file_path => $temp_file,
+        content_type => 'targeted',
+        is_1_based => $is_1_based,
+        description => 'generated with `genome feature-list merge`',
+    );
+    unless($cmd->execute && $cmd->new_feature_list) {
+        die $self->error_message('Failed to create FeatureList');
     }
+    my $merged_list = $cmd->new_feature_list;
 
-    say $merged_list->id;
     return 1;
 }
 
@@ -124,28 +122,89 @@ sub validate_properties_required_for_merge {
     return 1;
 }
 
-sub validate_list_references_are_compatible {
+sub find_common_reference_for_lists {
     my $class = shift;
-    my $reference = shift;
     my @feature_lists = @_;
 
-    my $error_count = 0;
-    for my $list (@feature_lists) {
-        unless($list->reference->is_compatible_with($reference)) {
-            $class->error_message(
-                'FeatureList %s has an incompatible reference, %s.',
-                $list->__display_name__,
-                $list->reference->name
-            );
-            $error_count++;
+    $class->find_common_reference(map $_->reference, @feature_lists);
+}
+
+sub find_common_reference {
+    my $class = shift;
+    my @all_references = uniq @_;
+
+    #if they all match, that's the correct one
+    if(scalar(@all_references) == 1) {
+        return $all_references[0];
+    }
+
+    my $combined_reference = $class->_find_combined_reference(@all_references);
+    return $combined_reference if $combined_reference;
+
+    my $convertible_reference = $class->_find_convertible_reference(@all_references);
+    return $convertible_reference if $convertible_reference;
+
+    die 'No compatible common reference for the input feature-lists was found.  Define one with `genome model define imported-reference-sequence`.';
+}
+
+sub _find_combined_reference {
+    my $class = shift;
+    my @references = @_;
+
+    my @exact_combined_references = Genome::Model::Build::ReferenceSequence->combined_references(@references);
+
+    if (scalar(@exact_combined_references) > 1) {
+        $class->_die_with_multiple_candidate_references(
+            'Found multiple references that are exact combinations of the references of the input feature-lists:',
+            @exact_combined_references,
+        );
+    }
+
+    return $exact_combined_references[0];
+}
+
+sub _find_convertible_reference {
+    my $class = shift;
+    my @references = @_;
+
+    #try to find a common reference to which all can be converted
+    my @target_references = @references;
+    push @target_references, $references[0]->convertible_to;
+    @target_references = uniq(@target_references);
+
+    my %available_conversions;
+    for my $reference (@references) {
+        $available_conversions{$reference->id} = {};
+        my @convertible_to = $reference->convertible_to;
+        for my $c (@convertible_to) {
+            $available_conversions{$reference->id}{$c->id} = 1;
         }
     }
 
-    if($error_count) {
-        die 'To combine FeatureLists with different references, first define a new reference compatible with the input references and supply it as the --reference parameter.';
+    my @convertible_references = grep {
+        my $target = $_; all { $target->contains($_) || $available_conversions{$_->id}{$target->id} } @references;
+    } @target_references;
+
+    if (scalar(@convertible_references) > 1) {
+        $class->_die_with_multiple_candidate_references(
+            'The references of the input feature-lists can be converted to multiple references:',
+            @convertible_references,
+        );
     }
 
-    return 1;
+    return $convertible_references[0];
+}
+
+sub _die_with_multiple_candidate_references {
+    my $class = shift;
+    my $message = shift;
+    my @references = @_;
+
+    $class->error_message(join("\n   ",
+        $message,
+        map { $_->__display_name__ } @references,
+    ));
+    die 'Please select the correct reference explicitly.';
 }
 
 sub validate_consistent_starting_base {
@@ -200,42 +259,51 @@ sub validate_consistent_multitrackedness {
     return $is_multitracked;
 }
 
-sub find_existing_list {
+sub _bed_file_for_list_and_reference {
     my $class = shift;
-    my ($bed_md5, $name) = @_;
+    my $feature_list = shift;
+    my $target_reference = shift;
 
-
-    my @existing_lists = Genome::FeatureList->get(file_content_hash => $bed_md5);
-    return unless @existing_lists;
-
-    my $list_to_use;
-
-    if(@existing_lists == 1) {
-        $list_to_use = $existing_lists[0];
-    } else {
-        my @matches = grep { $_->name eq $name } @existing_lists;
-        if(@matches == 1) {
-            $list_to_use = $matches[0];
-        }
+    my $list_reference = $feature_list->reference;
+    if($target_reference->contains($list_reference)) {
+        return $feature_list->file_path;
     }
 
-    unless($list_to_use) {
-        $class->error_message(
-            'Multiple matching existing FeatureLists found: %s',
-            join(' ', map $_->id, @existing_lists)
+    if(grep { $_->id eq $list_reference->id } $target_reference->combines) {
+        return $feature_list->file_path;
+    }
+
+    if(grep { $_->id eq $target_reference->id } $list_reference->convertible_to) {
+        my $converted_bed_result = Genome::Model::Build::ReferenceSequence::ConvertedBedResult->get_or_create(
+            source_reference => $list_reference,
+            target_reference => $target_reference,
+            source_bed => $feature_list->file_path,
+            source_md5 => Genome::Sys->md5sum($feature_list->file_path),
         );
-        die $class->error_message('To proceed make sure the --name parameter matches one of the existing lists.');
+        unless ($converted_bed_result) {
+            die $class->error_message(
+                'Failure converting feature-list %s to reference %s.',
+                $feature_list->__display_name__,
+                $target_reference->__display_name__,
+            );
+        }
+        return $converted_bed_result->target_bed;
     }
 
-    $class->status_message('Found existing list: %s', $list_to_use->__display_name__);
-    return $list_to_use;
+    $class->error_message(
+        'Could not convert reference %s for feature-list %s to the selected combined reference, %s.',
+        $list_reference->__display_name__,
+        $feature_list->__display_name__,
+        $target_reference->__display_name__,
+    );
+    die 'Please create or specify a compatible reference for the merged feature-list.';
 }
-
 
 #### Based on GSC::BEDFile ####
 
 sub combine_bed_content {
     my $class = shift;
+    my $target_reference = shift;
     my @feature_lists = @_;
 
     # Example:
@@ -245,7 +313,7 @@ sub combine_bed_content {
     my %track_content;
     foreach my $list (@feature_lists) {
         $class->debug_message('Attempting to parse tracks from %s', $list->name);
-        my $file_path = $list->file_path;
+        my $file_path = $class->_bed_file_for_list_and_reference($list, $target_reference);
         my $bed_data = Genome::Sys->read_file($file_path);
         my $content_hash = $class->hash_bed_content_by_tracks($bed_data);
         $track_content{$file_path} = $content_hash;

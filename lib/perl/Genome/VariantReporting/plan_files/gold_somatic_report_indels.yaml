@@ -1,7 +1,7 @@
 experts:
     'bam-readcount':
-        aligned_bam_result_id: aligned_bam_result_id
-        version: 0.5
+        aligned_bam_result_id: [aligned_bam_result_id]
+        version: 0.7
         minimum_mapping_quality: 0
         minimum_base_quality: 0
         max_count: 10000000
@@ -21,15 +21,15 @@ experts:
         plugins_version: 1
         joinx_version: 1.9
     dbsnp:
-        joinx_version: 1.9
+        joinx_version: 1.10
         info_string: 'CAF:dbSNPBuildID=dbSNPBuildID,per-alt:MUT'
         vcf: dbsnp_vcf
-    'homo-polymer':
+    homopolymer:
         joinx_version: 1.9
         max_length: 2
         info_string: 'HOMP_FILTER'
         homopolymer_list_id: homopolymer_list_id
-reporters:
+reports:
     'full':
         filters:
             'allele-in-genotype':
@@ -38,6 +38,12 @@ reporters:
                 info_tag: ON_TARGET
             homopolymer:
                 info_tag: HOMP_FILTER
+            'min-coverage.tumor':
+                min_coverage: 20
+                sample_name: discovery_tumor
+            'min-coverage.normal':
+                min_coverage: 20
+                sample_name: normal
         interpreters:
             position: {}
             'variant-type': {}
@@ -49,6 +55,7 @@ reporters:
                 min_coverage: 10
                 sample_name: discovery_tumor
             'min-coverage-observed':
+                sample_name_labels: sample_name_labels
                 sample_names:
                     - discovery_tumor
                     - normal
@@ -58,16 +65,27 @@ reporters:
                 normal_sample_names:
                     - normal
             'variant-callers':
+                valid_callers:
+                    - VarscanSomatic
+                    - Sniper
+                    - Strelka
+                    - Pindel
+                    - GatkSomaticIndel
                 sample_name: discovery_tumor
             'many-samples-vaf':
+                sample_name_labels: sample_name_labels
                 sample_names:
                     - discovery_tumor
                     - normal
+                library_name_labels: library_name_labels
+                library_names: [library_names]
         params:
-            file_name: 'gold_somatic_report_full.tsv'
+            sample_name_labels: sample_name_labels
             sample_names:
                 - discovery_tumor
                 - normal
+            library_name_labels: library_name_labels
+            library_names: [library_names]
     'simple':
         filters:
             'allele-in-genotype':
@@ -76,12 +94,16 @@ reporters:
                 info_tag: ON_TARGET
             homopolymer:
                 info_tag: HOMP_FILTER
+            'min-coverage.tumor':
+                min_coverage: 20
+                sample_name: discovery_tumor
+            'min-coverage.normal':
+                min_coverage: 20
+                sample_name: normal
         interpreters:
             position: {}
             vep: {}
             'variant-type': {}
-        params:
-            file_name: 'gold_somatic_report_simple.tsv'
     'vcf':
         filters: {}
         interpreters:
@@ -90,5 +112,27 @@ reporters:
                 info_tag: ON_TARGET
             homopolymer:
                 info_tag: HOMP_FILTER  
+            'min-coverage.tumor':
+                min_coverage: 20
+                sample_name: discovery_tumor
+            'min-coverage.normal':
+                min_coverage: 20
+                sample_name: normal
+    'bed':
+        filters:
+            'allele-in-genotype':
+                sample_name: gold
+            'contains-tag':
+                info_tag: ON_TARGET
+            homopolymer:
+                info_tag: HOMP_FILTER
+            'min-coverage.tumor':
+                min_coverage: 20
+                sample_name: discovery_tumor
+            'min-coverage.normal':
+                min_coverage: 20
+                sample_name: normal
+        interpreters:
+            'bed-entry': {}
         params:
-            file_name: 'gold_somatic_report.vcf'
+            generate_legend_file: 0

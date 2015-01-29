@@ -33,8 +33,9 @@ my $expected_hashref = {
             e2_p2 => 'something else'
         }
     },
-    reporters => {
-        reporter_alpha => {
+    needs_translation => 1,
+    reports => {
+        report_alpha => {
             filters      => {
                 filter_a => {
                     fa_p1 => 'something',
@@ -60,7 +61,7 @@ my $expected_hashref = {
                 ra_p2 => 'something else'
             }
         },
-        "reporter_alpha.2" => {
+        "report_alpha.2" => {
             filters      => {
                 filter_a => {
                     fa_p1 => 'something',
@@ -86,7 +87,7 @@ my $expected_hashref = {
                 ra_p2 => 'something else'
             }
         },
-        reporter_beta  => {
+        report_beta  => {
             filters => {},
             interpreters => { interpreter_x => {
                     ix_p1 => 'something',
@@ -111,13 +112,30 @@ is_deeply($pkg->create_from_file($path)->as_hashref, $expected_hashref, "Roundtr
 my $expert_one_plan = $plan->get_plan('expert', 'expert_one');
 is($expert_one_plan->name, 'expert_one', "Got correct plan ('expert_one') from get_plan");
 
-my $reporter_alpha_plan = $plan->get_plan('reporter', 'reporter_alpha');
-is($reporter_alpha_plan->name, 'reporter_alpha', "Got correct plan ('reporter_alpha') from get_plan");
+my $report_alpha_plan = $plan->get_plan('report', 'report_alpha');
+is($report_alpha_plan->name, 'report_alpha', "Got correct plan ('report_alpha') from get_plan");
 
-my $reporter_alpha2_plan = $plan->get_plan('reporter', 'reporter_alpha.2');
-is($reporter_alpha2_plan->name, 'reporter_alpha.2', "Got correct plan ('reporter_alpha2') from get_plan");
+my $report_alpha2_plan = $plan->get_plan('report', 'report_alpha.2');
+is($report_alpha2_plan->name, 'report_alpha.2', "Got correct plan ('report_alpha2') from get_plan");
 
 throws_ok sub {$plan->get_plan('bad_category', 'bad_name');}, qr(bad_category), "Dies when given a bad category";
 throws_ok sub {$plan->get_plan('expert', 'bad_name');}, qr(bad_name), "Dies when given a bad name";
+
+subtest 'Does not need translation' => sub {
+    my $plan = $pkg->create_from_file($plan_file);
+    ok($plan, "Made a plan from file ($plan_file).");
+    my $expected_hashref = {%{$expected_hashref}};
+
+    $plan->needs_translation(0);
+    $expected_hashref->{needs_translation} = 0;
+
+    is_deeply($pkg->create_from_hashref($plan->as_hashref)->as_hashref, $plan->as_hashref, "Roundtrip hashref test successful.");
+    is_deeply($pkg->create_from_json($plan->as_json)->as_hashref, $expected_hashref, "Roundtrip JSON test successful.");
+
+    my $path = Genome::Sys->create_temp_file_path;
+    $plan->write_to_file($path);
+    is_deeply($pkg->create_from_file($path)->as_hashref, $expected_hashref, "Roundtrip yaml file test successful.");
+};
+
 
 done_testing();

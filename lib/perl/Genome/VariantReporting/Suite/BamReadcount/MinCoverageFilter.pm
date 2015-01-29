@@ -10,8 +10,10 @@ class Genome::VariantReporting::Suite::BamReadcount::MinCoverageFilter {
     has => {
         min_coverage => {
             is => 'Number',
+            doc => 'Miminum coverage',
         },
     },
+    doc => q{Filter variants that don't meet minimum coverage},
 };
 
 sub name {
@@ -27,15 +29,26 @@ sub filter_entry {
 
     my @alt_alleles = @{$entry->{alternate_alleles}};
 
-    my $readcount_entry = $self->get_readcount_entry($entry);
-    unless ($readcount_entry) {
+    my $readcount_entries = $self->get_readcount_entries($entry);
+    unless ($readcount_entries) {
         return $self->pass_all_sample_alts($entry);
     }
 
-    if ($readcount_entry->depth >= $self->min_coverage) {
-        return map { $_ => 1 } @alt_alleles;
+    my %return_value;
+
+    for my $alt_allele (@alt_alleles) {
+        my $readcount_entry = $readcount_entries->{$alt_allele};
+        if (!defined $readcount_entry) {
+            $return_value{$alt_allele} = 1;
+        }
+        elsif ($readcount_entry->depth >= $self->min_coverage) {
+            $return_value{$alt_allele} = 1;
+        }
+        else {
+            $return_value{$alt_allele} = 0;
+        }
     }
-    return map { $_ => 0 } @alt_alleles;
+    return %return_value;
 }
 
 sub vcf_description {
@@ -45,7 +58,7 @@ sub vcf_description {
 
 sub vcf_id {
     my $self = shift;
-    return "MINCOV" . $self->min_coverage;
+    return "MINCOV" . $self->min_coverage . '_' . $self->sample_name;
 }
 
 1;

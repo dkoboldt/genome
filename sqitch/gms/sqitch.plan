@@ -327,3 +327,35 @@ unconstrain_model_name_length [model_model] 2014-09-04T13:19:39Z Thomas B. Moone
 
 config.tag_subject_mapping [config_tag config.subject_mapping] 2014-09-16T20:14:12Z Thomas B. Mooney <tmooney@genome.wustl.edu> # bridge between tags and subject mappings
 @1410987296 2014-09-17T20:54:57Z Thomas B. Mooney <tmooney@genome.wustl.edu># Add bridge between tags and subject mappings.
+
+process_schema [empty_db] 2014-11-08T02:40:17Z David Morton <dmorton@genome.wustl.edu> # Add process_schema
+process_schema_permissions [process_schema] 2014-11-08T02:49:44Z David Morton <dmorton@genome.wustl.edu> # permissions on process schema
+process_process [process_schema] 2014-11-08T03:18:00Z David Morton <dmorton@genome.wustl.edu> # table process.process
+process.process.status_index [process_process] 2014-11-09T20:58:16Z David Morton <dmorton@genome.wustl.edu> # index process.status
+process.process.created_by_index [process_process] 2014-11-09T21:08:19Z David Morton <dmorton@genome.wustl.edu> # index process.created_by
+process.process.times_index [process_process] 2014-11-09T21:17:28Z David Morton <dmorton@genome.wustl.edu> # index various process.process timestamps
+process.process.subclass_name_index [process_process] 2014-11-09T22:46:24Z David Morton <dmorton@genome.wustl.edu> # index process.process subclass_name
+process_status_event [process_schema] 2014-11-10T00:56:36Z David Morton <dmorton@genome.wustl.edu> # add process.status_event table
+process.status_event.timestamp_index [process_status_event] 2014-11-10T02:48:04Z David Morton <dmorton@genome.wustl.edu> # index process.status_event timestamp
+@1415746219 2014-11-11T22:50:20Z David Morton <dmorton@genome.wustl.edu> # Added Genome::Process
+
+process_process_permissions [process_process] 2014-11-12T01:41:28Z David Morton <dmorton@genome.wustl.edu> # Don't let gms-user delete processes
+process_status_event_permissions [process_status_event] 2014-11-12T01:52:40Z David Morton <dmorton@genome.wustl.edu> # Don't let gms-user delete or update entries
+@1415936417 2014-11-14T03:40:18Z David Morton <dmorton@genome.wustl.edu> # restrict gms-user permissions on Process tables
+
+process_input [process_process] 2014-11-12T02:18:57Z David Morton <dmorton@genome.wustl.edu> # Add process.input table
+@1416002215 2014-11-14T21:56:56Z David Morton <dmorton@genome.wustl.edu> # Add process.input table
+
+make_model_group_id_nullable [config_analysis_project] 2014-12-03T19:07:30Z Adam Coffman <acoffman@genome.wustl.edu> # make this column nullable to prepare for its removal
+@1417712498 2014-12-04T17:01:39Z Adam Coffman <acoffman@genome.wustl.edu># Make model_group_id nullable
+
+remove_width_constraint_for_result_users [result_user] 2014-12-05T17:40:15Z Adam Coffman <acoffman@genome.wustl.edu> # convert from a constrained varchar to text
+@1417807321 2014-12-05T19:22:02Z Adam Coffman <acoffman@genome.wustl.edu># Remove width of label column
+
+remove_model_groups_from_analysis_project [make_model_group_id_nullable] 2014-12-04T19:05:22Z Adam Coffman <acoffman@genome.wustl.edu> # removing model groups from analysis projects
+@1419271481 2014-12-22T18:04:41Z Adam Coffman <acoffman@genome.wustl.edu># remove model group ids from AnPs
+remove_params_and_inputs_from_software_results [result_software_result] 2014-12-11T21:30:31Z Adam Coffman <acoffman@genome.wustl.edu> # these columns are not used
+@1419271745 2014-12-22T18:09:06Z Adam Coffman <acoffman@genome.wustl.edu># remove unused columns in software result table
+
+drop_featurelist_file_id [model_feature_list] 2014-12-18T15:26:31Z Thomas B. Mooney <tmooney@genome.wustl.edu> # drop obsolete column
+@1419272844 2014-12-22T18:27:24Z Thomas B. Mooney <tmooney@genome.wustl.edu># dropped file_id column from feature lists

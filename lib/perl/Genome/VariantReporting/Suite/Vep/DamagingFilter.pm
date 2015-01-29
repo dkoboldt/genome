@@ -4,9 +4,11 @@ use strict;
 use warnings;
 use Genome;
 use Genome::File::Vcf::VepConsequenceParser;
+use Memoize qw();
 
 class Genome::VariantReporting::Suite::Vep::DamagingFilter {
     is => 'Genome::VariantReporting::Framework::Component::Filter',
+    doc => q{Filter out variants that aren't considered damaging},
 };
 
 sub name {
@@ -37,7 +39,7 @@ sub vep_parser {
     my $header = shift;
     return new Genome::File::Vcf::VepConsequenceParser($header);
 }
-Memoize::memoize('vep_parser');
+Memoize::memoize('vep_parser', LIST_CACHE => 'MERGE');
 
 sub is_damaging {
     my $transcript = shift;
@@ -95,5 +97,14 @@ sub non_synonymous_damaging_expression {
     );
     return join("|", @damaging);
 }
+
+sub vcf_id {
+    return 'DAMAGING';
+}
+
+sub vcf_description {
+    return 'Filter out variants that aren\'t considered to be damaging';
+}
+
 1;
 

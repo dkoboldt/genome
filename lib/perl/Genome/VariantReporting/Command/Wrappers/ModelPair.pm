@@ -8,6 +8,8 @@ use Genome;
 use File::Basename qw(dirname);
 use File::Spec;
 use Genome::File::Tsv;
+use YAML qw();
+use List::MoreUtils qw(uniq);
 
 class Genome::VariantReporting::Command::Wrappers::ModelPair {
     has => {
@@ -20,30 +22,65 @@ class Genome::VariantReporting::Command::Wrappers::ModelPair {
             is => 'Text',
             is_optional => 1,
         },
-        base_output_dir => { is => 'Text', },
+        label => { is => 'Text', },
         plan_file_basename => {
             is => 'Text',
             default_value => "cle_TYPE_report.yaml",
             doc => "plan file name where 'snvs' or 'indels' is substituted by placeholder TYPE",
         },
     },
-    has_calculated => {
-        output_dir => {
-            calculate_from => [qw/ base_output_dir discovery /],
-            calculate => q| my $roi_nospace  = $discovery->region_of_interest_set->name;
-                $roi_nospace =~ s/ /_/g;
-                return File::Spec->join($base_output_dir, $roi_nospace); |,
-        },
+    has_transient => [
         translations_file => {
-            calculate_from => [qw/ output_dir /],
-            calculate => q( File::Spec->join($output_dir, "resource.yaml") ),
-        },
-        sample_legend => {
-            calculate_from => [qw/ output_dir /],
-            calculate => q( File::Spec->join($output_dir, "sample_legend.tsv") ),
+            is => 'Path',
         }
-    },
+    ],
+    has_transient_optional => {
+        dag => {
+            is => 'Genome::WorkflowBuilder::DAG',
+        },
+        common_translations => {
+            is => 'HASH',
+            default => {},
+        },
+    }
 };
+
+sub dag {
+    my $self = shift;
+
+    unless (defined($self->__dag)) {
+        my $cmd = Genome::VariantReporting::Command::CreateMergedReports->create(
+            %{$self->params_for_command},
+        );
+        my $dag = $cmd->dag;
+        $dag->name(sprintf('%s (%s-%s)',
+                $dag->name, $self->roi, $self->label));
+        $self->__dag($dag);
+    }
+    return $self->__dag;
+}
+
+sub params_for_command {
+    my $self = shift;
+    return {
+        label_fields => {
+            roi_name => $self->roi,
+            category => $self->label,
+        },
+        snvs_input_vcf => $self->input_vcf('snvs'),
+        snvs_plan_file => $self->plan_file('snvs'),
+        snvs_translations_file => $self->translations_file,
+        indels_input_vcf => $self->input_vcf('indels'),
+        indels_plan_file => $self->plan_file('indels'),
+        indels_translations_file => $self->translations_file,
+        use_header_from => 'snvs',
+    };
+}
+
+sub roi {
+    my $self = shift;
+    return $self->discovery->region_of_interest_set->name;
+}
 
 sub plan_file {
     my ($self, $type) = @_;
@@ -61,55 +98,20 @@ sub report_names {
     my ($self, $variant_type) = @_;
     my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->create_from_file($self->plan_file($variant_type));
     my @file_names;
-    for my $reporter_plan ($plan->reporter_plans) {
-        push @file_names, $reporter_plan->object->file_name;
+    for my $report_plan ($plan->report_plans) {
+        push @file_names, $report_plan->object->file_name;
     }
     return @file_names;
 }
 
-sub reports_directory {
-    my ($self, $variant_type) = @_;
-    return File::Spec->join($self->output_dir, "reports_$variant_type");
-};
-
-sub logs_directory {
-    my ($self, $variant_type) = @_;
-    return  File::Spec->join($self->output_dir, "logs_$variant_type");
-};
-
 sub create {
     my $class = shift;
     my $self = $class->SUPER::create(@_);
-    Genome::Sys->create_directory($self->output_dir);
-    $self->generate_sample_legend_file;
-    $self->generate_translations_file;
-    my $provider = Genome::VariantReporting::Framework::Component::RuntimeTranslations->create_from_file($self->translations_file);
-    for my $variant_type (qw(snvs indels)) {
-        Genome::Sys->create_directory($self->reports_directory($variant_type));
-        my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->create_from_file($self->plan_file($variant_type));
-        $plan->write_to_file(File::Spec->join($self->reports_directory($variant_type), "plan.yaml"));
-        Genome::Sys->create_directory($self->logs_directory($variant_type));
-        $provider->write_to_file(File::Spec->join($self->reports_directory($variant_type), "resources.yaml"));
-    }
+
+    my $translations_file = $self->generate_translations_file;
+    $self->translations_file($translations_file);
     return $self;
 };
-
-sub is_valid {
-    my $self = shift;
-
-    if (my @problems = $self->__errors__) {
-        $self->error_message('Model pair is invalid!');
-        for my $problem (@problems) {
-            my @properties = $problem->properties;
-            $self->error_message("Property " .
-                join(',', map { "'$_'" } @properties) .
-                ': ' . $problem->desc);
-        }
-        return;
-    }
-
-    return 1;
-}
 
 sub get_aligned_bams {
     my $self = shift;
@@ -126,18 +128,18 @@ sub get_sample_and_bam_map {
     my $self = shift;
 
     my %bams = (
-        $self->discovery->tumor_sample->name  => $self->discovery->tumor_bam,
-        $self->discovery->normal_sample->name => $self->discovery->normal_bam,
+        sprintf('Discovery(%s)', $self->discovery->tumor_sample->name)  => $self->discovery->tumor_bam,
+        sprintf('Normal(%s)', $self->discovery->normal_sample->name) => $self->discovery->normal_bam,
     );
     if ($self->followup) {
-        $bams{$self->followup->tumor_sample->name} = $self->followup->tumor_bam,
+        $bams{sprintf('Followup(%s)', $self->followup->tumor_sample->name)} = $self->followup->tumor_bam,
     }
     return %bams;
 }
 
 sub get_translations {
     my $self = shift;
-    my %translations;
+    my %translations = %{$self->common_translations};
     $translations{discovery_tumor} = $self->discovery->tumor_sample->name;
     $translations{normal} = $self->discovery->normal_sample->name;
     if ($self->followup) {
@@ -149,29 +151,24 @@ sub get_translations {
     return \%translations;
 }
 
-sub generate_sample_legend_file {
+sub get_library_names {
     my $self = shift;
 
-    my $translations = $self->get_translations;
-    my $legend_file = Genome::File::Tsv->create($self->sample_legend);
-    my @headers = ('sample label', 'sample name');
-    my $writer = $legend_file->create_writer(headers => \@headers);
-    while ( my ($sample_label, $sample_name) = each %$translations ) {
-        $writer->write_one({
-            'sample label' => $sample_label,
-            'sample name' => $sample_name,
-         });
+    my @instrument_data = $self->discovery->instrument_data;
+    if (defined $self->followup) {
+        push @instrument_data, $self->followup->instrument_data;
     }
+    my @libraries = uniq map {$_->library} @instrument_data;
+    return [map {$_->name} @libraries];
 }
 
 sub generate_translations_file {
     my $self = shift;
 
-    return if not $self->is_valid;
-
     my $translations = $self->get_translations;
 
     $translations->{aligned_bam_result_id} = $self->get_aligned_bams;
+    $translations->{library_names} = $self->get_library_names;
 
     my %feature_list_ids;
     my $on_target_feature_list = Genome::FeatureList->get(name => $self->discovery->region_of_interest_set->name);
@@ -188,9 +185,10 @@ sub generate_translations_file {
     $translations->{dbsnp_vcf} = $self->discovery->previously_discovered_variations_build->snvs_vcf;
     $translations->{nhlbi_vcf} = _get_nhlbi_vcf(); 
 
-    YAML::DumpFile(File::Spec->join($self->translations_file), $translations);
+    my $temp_file = Genome::Sys->create_temp_file_path;
+    YAML::DumpFile($temp_file, $translations);
 
-    return 1;
+    return $temp_file;
 }
 
 sub reference_sequence_build {

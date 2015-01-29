@@ -6,7 +6,7 @@ use Genome;
 use Params::Validate qw(validate validate_pos :types);
 
 class Genome::VariantReporting::Framework::Component::Adaptor {
-    is => ['Command::V2', 'Genome::VariantReporting::Framework::Component::Base', 'Genome::VariantReporting::Framework::Component::WithTranslatedInputs'],
+    is => ['Command::V2', 'Genome::VariantReporting::Framework::Component::WithTranslatedInputs'],
     is_abstract => 1,
     attributes_have => {
         is_planned => {
@@ -14,10 +14,7 @@ class Genome::VariantReporting::Framework::Component::Adaptor {
             default => 0,
         },
     },
-    has_input => [
-        provider_json => {
-            is => 'Text',
-        },
+    has_structural_input => [
         variant_type => {
             is => 'Text',
             is_output => 1,
@@ -54,10 +51,7 @@ sub resolve_plan_attributes {
     while (my ($name, $value) = each %{$specific_plan->adaptor_params}) {
         $self->$name($value);
     }
-
-    my $translations = $self->provider->translations;
-
-    $self->translate_inputs($translations);
+    return;
 }
 
 sub plan {
@@ -72,12 +66,6 @@ sub planned_output_names {
     my @properties = $self->__meta__->properties(
         is_output => 1, is_planned => 1);
     return map {$_->property_name} @properties;
-}
-
-sub provider {
-    my $self = shift;
-
-    return Genome::VariantReporting::Framework::Component::RuntimeTranslations->create_from_json($self->provider_json);
 }
 
 # TODO this is not covered by tests

@@ -21,9 +21,13 @@ class Genome::InstrumentData::Command::Import::WorkFlow::SraToBam {
             is => 'Text',
             doc => 'Path of the SRA.',
         },
-        library => {
-            is => 'Genome::Library',
-            doc => 'The library name to use and then derive the read group name.',
+        sample_name => {
+            is => 'Text',
+            doc => 'The sample name to use in the RG header.',
+        },
+        library_name => {
+            is => 'Text',
+            doc => 'The library name to use as the IDs in the SAM RG and LB headers.',
         },
     ],
     has_output => [
@@ -182,9 +186,7 @@ sub merge_unaligned_fastq_into_bam {
     $self->debug_message('Convert unaligned fastq to bam...');
     my $unaligned_bam = $unaligned_fastq.'.bam';
 
-    my $conversion_ok = $self->convert_fastq_to_bam(
-        $self->library->sample->name,
-        $unaligned_fastq, $unaligned_bam);
+    my $conversion_ok = $self->convert_fastq_to_bam($unaligned_fastq, $unaligned_bam);
     if ($conversion_ok) {
         $self->debug_message('Convert unaligned fastq to bam...done');
     }
@@ -282,13 +284,15 @@ sub dump_unaligned_fastq {
 
 sub convert_fastq_to_bam {
     my $self = shift;
-    my ($sample_name, $unaligned_fastq, $unaligned_bam) = @_;
+    my ($unaligned_fastq, $unaligned_bam) = @_;
 
     return try {
         my $fastq_to_sam = Genome::Model::Tools::Picard::FastqToSam->create(
             fastq           => "$unaligned_fastq",
             output          => "$unaligned_bam",
-            sample_name     => "$sample_name",
+            sample_name => $self->sample_name,
+            library_name => $self->library_name,
+            read_group_name => $self->library_name,
             quality_format  => 'Standard');
         return $fastq_to_sam->execute;
     }

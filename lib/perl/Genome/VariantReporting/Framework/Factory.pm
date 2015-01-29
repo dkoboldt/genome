@@ -57,12 +57,12 @@ use Module::Pluggable
 use Module::Pluggable
     require => 1,
     search_path => search_path(),
-    only => qr(Reporter$),
+    only => qr(Report$),
     except => [
-        'Genome::VariantReporting::Framework::Component::Reporter',
-        'Genome::VariantReporting::Framework::Component::Reporter::SingleFile',
+        'Genome::VariantReporting::Framework::Component::Report',
+        'Genome::VariantReporting::Framework::Component::Report::SingleFile',
     ],
-    sub_name => 'reporters';
+    sub_name => 'reports';
 
 class Genome::VariantReporting::Framework::Factory {};
 
@@ -75,6 +75,38 @@ sub get_object {
     my ($self, $accessor, $name, $params) = validate_pos(@_, 1, 1, 1, 1);
     my $pkg = $self->get_class($accessor, $name);
     return $pkg->create(%$params);
+}
+
+{
+    package Genome::VariantReporting::Framework::Factory::Dummy;
+    require Carp;
+
+    sub AUTOLOAD {
+        my $self = shift;
+
+        my $target_sub = our $AUTOLOAD;
+        $target_sub =~ s/.+:://;
+        if(exists( $self->{$target_sub} )) {
+            return $self->{$target_sub};
+        } else {
+            my $pkg = $self->{class};
+            my $sub = $pkg->can($target_sub);
+            Carp::croak "Subroutine $target_sub not found on package $pkg" unless $sub;
+
+            $sub->($self, @_);
+        }
+    }
+}
+
+sub get_dummy_object {
+    my ($self, $accessor, $name) = validate_pos(@_, 1, 1, 1);
+    my $pkg = $self->get_class($accessor, $name);
+    my $params = $pkg->_get_dummy_params;
+
+    $params->{class} = $pkg;
+    bless $params, 'Genome::VariantReporting::Framework::Factory::Dummy';
+
+    return $params;
 }
 
 sub get_class {
@@ -90,7 +122,7 @@ sub get_class {
             join("\n    ", $self->names($accessor)));
     }
 }
-Memoize::memoize('get_class');
+Memoize::memoize('get_class', LIST_CACHE => 'MERGE');
 
 sub _truncate_name {
     my $name = shift;

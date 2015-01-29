@@ -213,7 +213,7 @@ sub create {
 
     # If no commit is on, make a dummy volume to allocate to
     if ($ENV{UR_DBI_NO_COMMIT}) {
-        if ($CREATE_DUMMY_VOLUMES_FOR_TESTING) { # && !$params{mount_path}) {
+        if ($CREATE_DUMMY_VOLUMES_FOR_TESTING) {
             my $tmp_volume = Genome::Disk::Volume->create_dummy_volume(
                 mount_path => $params{mount_path},
                 disk_group_name => $params{disk_group_name},
@@ -437,7 +437,8 @@ sub get_lock {
     $tries ||= 60;
 
     my $allocation_lock = Genome::Sys->lock_resource(
-        resource_lock => $ENV{GENOME_LOCK_DIR} . '/allocation/allocation_' . join('_', split(' ', $id)),
+        resource_lock => 'allocation/allocation_' . join('_', split(' ', $id)),
+        scope => 'site',
         max_try => $tries,
         block_sleep => 1,
     );
@@ -484,13 +485,13 @@ sub shadow_get_or_create {
     my $md5_hex = md5_hex($params{allocation_path});;
 
     my $path = File::Spec->join(
-        $ENV{GENOME_LOCK_DIR},
         'allocation',
         'allocation_path_' . $md5_hex,
     );
 
     my $lock = Genome::Sys->lock_resource(
         resource_lock => $path,
+        scope => 'site',
         wait_announce_interval => 600,
     );
 
@@ -551,8 +552,7 @@ sub _execute_system_command {
         $allocation = $class->$method(%params);
     }
     else {
-        # remove the parens if you DARE
-        my @includes = map { ( '-I' => $_ ) } UR::Util::used_libs;
+        my @includes = map { -I => $_ } UR::Util::used_libs;
 
         my $param_string = Genome::Utility::Text::hash_to_string(\%params, 'q');
         my @statements = (
@@ -997,11 +997,14 @@ sub _create_file_summaries {
     my $self = shift;
 
     my $old_cwd = getcwd;
-    chdir($self->absolute_path);
+    chdir($self->absolute_path)
+        or return $self->warning_message('Failed to chdir to %s. Skipping file summaries.', $self->absolute_path);
+
     my @files;
     #why is File::Find this stupid? who knows...
     File::Find::find(sub { push(@files, $File::Find::name) unless (-d $_) }, '.');
-    chdir($old_cwd);
+    chdir($old_cwd)
+        or die $self->error_message('Failed to chdir back to %s.', $old_cwd);
 
     for my $file (@files) {
         Genome::Disk::Allocation::FileSummary->create_or_update(
@@ -1009,6 +1012,8 @@ sub _create_file_summaries {
             file => $file
         );
     }
+
+    return 1;
 }
 
 sub _symlink_new_path_from_old {

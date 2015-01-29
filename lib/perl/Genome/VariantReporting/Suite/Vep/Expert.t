@@ -29,15 +29,14 @@ use_ok($pkg) || die;
 my $factory = Genome::VariantReporting::Framework::Factory->create();
 isa_ok($factory->get_class('experts', $pkg->name), $pkg);
 
-my $VERSION = 11; # Bump these each time test data changes
+my $VERSION = 12; # Bump these each time test data changes
 my $RESOURCE_VERSION = 2;
 
 my $test_dir = get_test_dir($pkg, $VERSION);
 
 my $expert = $pkg->create();
 my $dag = $expert->dag();
-my $expected_xml = File::Spec->join($test_dir, 'expected.xml');
-test_dag_xml($dag, $expected_xml);
+test_dag_xml($dag, __FILE__);
 
 set_what_interpreter_x_requires('vep');
 my $variant_type = 'snvs';
@@ -56,12 +55,7 @@ my $feature_list = $feature_list_cmd->execute;
 $provider->translations({%{$provider->translations}, feature_list_ids => {TEST => $feature_list->id}});
 
 
-my $plan = Genome::VariantReporting::Framework::Plan::MasterPlan->create_from_file(
-    File::Spec->join($test_dir, 'plan.yaml'),
-);
-$plan->validate();
-
 my $input_vcf = File::Spec->join($test_dir, "$variant_type.vcf.gz");
-test_dag_execute($dag, $expected_vcf, $input_vcf, $provider, $variant_type, $plan);
+test_dag_execute($dag, $expected_vcf, $input_vcf, $provider, $variant_type, __FILE__);
 
 done_testing();

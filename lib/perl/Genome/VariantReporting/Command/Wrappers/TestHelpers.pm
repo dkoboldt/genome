@@ -20,15 +20,17 @@ use File::DirCompare;
 use File::Basename qw(dirname basename);
 use Sub::Install qw(reinstall_sub);
 use Exporter 'import';
+use Memoize qw();
+use Params::Validate qw(validate_pos :types);
 
-our @EXPORT_OK = qw(get_build succeed_build compare_directories);
+our @EXPORT_OK = qw(get_build succeed_build compare_directories compare_directories_and_files);
 my $TEST_DIR = __FILE__.".d";
 my $PROVIDER_TEST_DIR = Genome::Utility::Test->data_dir("Genome::VariantReporting::Framework::Component::RuntimeTranslations", "v3");
 
 sub _get_pp {
     return Genome::Test::Factory::ProcessingProfile::SomaticValidation->setup_object();
 }
-Memoize::memoize("_get_pp");
+Memoize::memoize("_get_pp", LIST_CACHE => 'MERGE');
 
 my $fl_counter = -1;
 sub _get_or_create_feature_list {
@@ -107,6 +109,8 @@ sub get_build {
 
     my $alignment_result =  _get_alignment_result();
     my $third_alignment_result = _get_third_alignment_result();
+    my $control_alignment_result = _get_control_alignment_result();
+
     reinstall_sub( {
             into => "Genome::Model::Build::SomaticValidation",
             as => "merged_alignment_result",
@@ -115,13 +119,14 @@ sub get_build {
                 if ($self->tumor_sample->name eq "TEST-patient1-somval_tumor1") {
                     return $alignment_result;
                 }
+                elsif ($self->tumor_sample->name eq "TEST-patient1-somval_normal1") {
+                    return $control_alignment_result;
+                }
                 else {
                     return $third_alignment_result;
                 }
             },
         });
-
-    my $control_alignment_result = _get_control_alignment_result();
 
     reinstall_sub( {
             into => "Genome::Model::Build::SomaticValidation",
@@ -194,22 +199,31 @@ sub _get_alignment_result {
         });
     return $result;
 }
-Memoize::memoize("_get_alignment_result");
+Memoize::memoize("_get_alignment_result", LIST_CACHE => 'MERGE');
 
 sub _get_control_alignment_result {
     Genome::InstrumentData::AlignmentResult::Merged->__define__(id => "-533e0bb1a99f4fbe9e31cf6e19907133", output_dir => $TEST_DIR);
 }
-Memoize::memoize("_get_control_alignment_result");
+Memoize::memoize("_get_control_alignment_result", LIST_CACHE => 'MERGE');
 
 sub _get_third_alignment_result {
     Genome::InstrumentData::AlignmentResult::Merged->__define__(id => "-ghij4i5j230509ug345", output_dir => $TEST_DIR);
 }
-Memoize::memoize("_get_third_alignment_result");
+Memoize::memoize("_get_third_alignment_result", LIST_CACHE => 'MERGE');
 
 sub compare_directories {
-    my ($expected_dir, $output_dir) = @_;
+    my ($output_dir, $expected_dir) = @_;
+    compare_directories_and_files($output_dir, $expected_dir, 0);
+}
+
+sub compare_directories_and_files {
+    my ($output_dir, $expected_dir, $compare_file_contents) = validate_pos(
+        @_, 1, 1, {default => 1},
+    );
     my (@a_only, @b_only, @diff);
-    my $comparison = File::DirCompare->compare($expected_dir, $output_dir, sub {
+    my $comparison = File::DirCompare->compare($expected_dir,
+        $output_dir,
+        sub {
             my ($a, $b) = @_;
             if (! $b) {
                 printf "Only in %s: %s\n", dirname($a), basename($a);
@@ -221,13 +235,15 @@ sub compare_directories {
                 print "Files $a and $b differ\n";
                 push @diff, $a;
             }
-        }, {cmp => sub {
-               return 0; 
-            }
-        });
-    is(scalar (grep {!($_ =~ /logs_|ignore/)} @a_only), 0, "No files only in expected dir");
-    is(scalar (grep {!($_ =~ /logs_|ignore/)} @b_only), 0, "No files only in output dir");
+        },
+    );
+    is(scalar (grep {!($_ =~ /logs_|ignore/)} @a_only), 0, sprintf("No files only in expected dir (%s)", $expected_dir));
+    is(scalar (grep {!($_ =~ /logs_|ignore/)} @b_only), 0, sprintf("No files only in output dir (%s)", $output_dir));
+    if ($compare_file_contents) {
+        is(scalar (grep {!($_ =~ /logs_|ignore/)} @diff), 0, "No files diffed");
+    }
 }
+
 sub unzip {
     my $file = shift;
     my $unzipped = Genome::Sys->create_temp_file_path;

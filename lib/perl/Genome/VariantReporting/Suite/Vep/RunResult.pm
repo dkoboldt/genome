@@ -7,6 +7,7 @@ use Sys::Hostname;
 use IPC::Run qw(run);
 use File::Basename qw(dirname);
 use JSON;
+use Memoize qw();
 
 my $_JSON_CODEC = new JSON->allow_nonref;
 
@@ -138,7 +139,7 @@ sub _get_file_path_for_feature_list {
     my $feature_list = Genome::FeatureList->get($id);
     return $feature_list->get_tabix_and_gzipped_bed_file,
 }
-Memoize::memoize("_get_file_path_for_feature_list");
+Memoize::memoize("_get_file_path_for_feature_list", LIST_CACHE => 'MERGE');
 
 sub custom_annotation_inputs {
     my $self = shift;
@@ -213,6 +214,7 @@ sub _merge_annotations {
     Genome::Model::Tools::Joinx::VcfMerge->execute(
         input_files => [$self->sorted_input_vcf, $self->sorted_vep_output],
         output_file => $self->final_vcf_file,
+        use_version => $self->joinx_version,
         merge_strategy_file => $self->joinx_merge_strategy_file,
         exact_pos => 1,
     );

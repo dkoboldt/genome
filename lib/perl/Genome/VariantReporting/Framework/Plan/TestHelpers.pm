@@ -129,6 +129,10 @@ sub set_what_interpreter_x_requires {
         "interpreter_z";
     }
 
+    sub requires_annotations {
+        return ();
+    }
+
     sub interpret_entry {
         my $self = shift;
         my $entry = shift;
@@ -162,25 +166,25 @@ sub set_what_interpreter_x_requires {
 
 
 {
-    package Genome::VariantReporting::TestReporter;
+    package Genome::VariantReporting::TestReport;
 
     use strict;
     use warnings FATAL => 'all';
     use Genome;
 
-    class Genome::VariantReporting::TestReporter {
-        is => 'Genome::VariantReporting::Reporter::WithHeader',
-        has => [
+    class Genome::VariantReporting::TestReport {
+        is => 'Genome::VariantReporting::Report::WithHeader',
+        has_param => [
             ra_p1 => {},
             ra_p2 => {},
         ],
     };
 
     sub name {
-        "reporter_alpha";
+        "report_alpha";
     }
 
-    sub requires_interpreters {
+    sub required_interpreters {
         return qw(interpreter_x);
     }
 
@@ -210,25 +214,25 @@ sub set_what_interpreter_x_requires {
 }
 
 {
-    package Genome::VariantReporting::AnotherTestReporter;
+    package Genome::VariantReporting::AnotherTestReport;
 
     use strict;
     use warnings FATAL => 'all';
     use Genome;
 
-    class Genome::VariantReporting::AnotherTestReporter {
-        is => 'Genome::VariantReporting::Framework::Component::Reporter::SingleFile',
-        has => [
+    class Genome::VariantReporting::AnotherTestReport {
+        is => 'Genome::VariantReporting::Framework::Component::Report::SingleFile',
+        has_param => [
             rb_p1 => {},
             rb_p2 => {},
         ],
     };
 
     sub name {
-        "reporter_beta";
+        "report_beta";
     }
 
-    sub requires_interpreters {
+    sub required_interpreters {
         return qw(interpreter_x interpreter_y);
     }
 
@@ -236,15 +240,15 @@ sub set_what_interpreter_x_requires {
 }
 
 {
-    package Genome::VariantReporting::YetAnotherTestReporter;
+    package Genome::VariantReporting::YetAnotherTestReport;
 
     use strict;
     use warnings FATAL => 'all';
     use Genome;
 
-    class Genome::VariantReporting::YetAnotherTestReporter {
-        is => 'Genome::VariantReporting::Reporter::WithHeader',
-        has => [
+    class Genome::VariantReporting::YetAnotherTestReport {
+        is => 'Genome::VariantReporting::Report::WithHeader',
+        has_param => [
             rc_p1 => {},
             rc_p2 => {},
         ],
@@ -252,10 +256,10 @@ sub set_what_interpreter_x_requires {
     };
 
     sub name {
-        "reporter_gamma";
+        "report_gamma";
     }
 
-    sub requires_interpreters {
+    sub required_interpreters {
         return qw(interpreter_x interpreter_y);
     }
 
@@ -288,24 +292,24 @@ sub set_what_interpreter_x_requires {
 }
 
 {
-    package Genome::VariantReporting::TestDeltaReporter;
+    package Genome::VariantReporting::TestDeltaReport;
 
     use strict;
     use warnings FATAL => 'all';
     use Genome;
 
-    class Genome::VariantReporting::TestDeltaReporter {
-        is => 'Genome::VariantReporting::Framework::Component::Reporter',
-        has => [
+    class Genome::VariantReporting::TestDeltaReport {
+        is => 'Genome::VariantReporting::Framework::Component::Report',
+        has_param => [
             p1 => {},
         ],
     };
 
     sub name {
-        "reporter_delta";
+        "report_delta";
     }
 
-    sub requires_interpreters {
+    sub required_interpreters {
         return qw(interpreter_x);
     }
 
@@ -317,23 +321,21 @@ sub set_what_interpreter_x_requires {
 }
 
 {
-    package Genome::VariantReporting::TestEpsilonReporter;
+    package Genome::VariantReporting::TestEpsilonReport;
 
     use strict;
     use warnings FATAL => 'all';
     use Genome;
 
-    class Genome::VariantReporting::TestEpsilonReporter {
-        is => 'Genome::VariantReporting::Framework::Component::Reporter',
-        has => [
-        ],
+    class Genome::VariantReporting::TestEpsilonReport {
+        is => 'Genome::VariantReporting::Framework::Component::Report',
     };
 
     sub name {
-        "reporter_epsilon";
+        "report_epsilon";
     }
 
-    sub requires_interpreters {
+    sub required_interpreters {
         return qw(interpreter_z);
     }
 
@@ -487,6 +489,10 @@ sub set_what_interpreter_x_requires {
 
     sub name {
         'filter_one';
+    }
+
+    sub requires_annotations {
+        return qw(expert_one);
     }
 
     sub filter_entry {

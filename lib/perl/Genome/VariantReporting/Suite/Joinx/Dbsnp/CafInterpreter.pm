@@ -8,6 +8,7 @@ use List::Util qw(max);
 
 class Genome::VariantReporting::Suite::Joinx::Dbsnp::CafInterpreter {
     is => ['Genome::VariantReporting::Suite::Joinx::Dbsnp::ComponentBase', 'Genome::VariantReporting::Framework::Component::Interpreter'],
+    doc => 'Calculate the allele frequence based on 1000Genomes and the highest allele frequency',
 };
 
 sub name {
@@ -22,8 +23,8 @@ sub requires_annotations {
 
 sub field_descriptions {
     return (
-        caf => 'Allele frequency at this position based on 1000Genomes',
-        max_alt_af => 'The highest allele frequency at this position'
+        dbSNP_caf => 'Allele frequency at this position based on dbSNP',
+        dbSNP_max_alt_af => 'The highest allele frequency at this position based on dbSNP'
     );
 }
 
@@ -39,12 +40,12 @@ sub _interpret_entry {
     my $highest_alt_af = _highest_af($caf);
     for my $variant_allele (@$passed_alt_alleles) {
         if (!defined $entry->info("CAF")) {
-            $return_values{$variant_allele}->{caf} = undef;
-            $return_values{$variant_allele}->{max_alt_af} = undef;
+            $return_values{$variant_allele}->{dbSNP_caf} = undef;
+            $return_values{$variant_allele}->{dbSNP_max_alt_af} = undef;
         }
         else {
-            $return_values{$variant_allele}->{max_alt_af} = $highest_alt_af;
-            $return_values{$variant_allele}->{caf} = $caf->{$variant_allele};
+            $return_values{$variant_allele}->{dbSNP_max_alt_af} = $highest_alt_af;
+            $return_values{$variant_allele}->{dbSNP_caf} = $caf->{$variant_allele};
         }
     }
 

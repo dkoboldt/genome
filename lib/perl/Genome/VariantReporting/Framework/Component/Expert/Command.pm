@@ -3,7 +3,6 @@ package Genome::VariantReporting::Framework::Component::Expert::Command;
 use strict;
 use warnings FATAL => 'all';
 use Genome;
-use Data::Dump qw(pp);
 use Set::Scalar;
 use JSON;
 
@@ -16,7 +15,7 @@ use Genome::VariantReporting::Framework::FileLookup qw(
 
 class Genome::VariantReporting::Framework::Component::Expert::Command {
     is_abstract => 1,
-    is => ['Command::V2', 'Genome::VariantReporting::Framework::Component::Base'],
+    is => ['Genome::Command::DelegatesToResult', 'Genome::VariantReporting::Framework::Component::Base'],
     has_input => [
         input_vcf => {
             is => 'Path',
@@ -26,13 +25,18 @@ class Genome::VariantReporting::Framework::Component::Expert::Command {
             valid_values => ['snvs', 'indels'],
             doc => "The type of variant the input_result represents",
         },
+        user => {
+            is => 'Genome::Process',
+            is_optional => 1,
+            id_by => 'process_id',
+        },
+        process_id => {
+            is => 'Text',
+        },
     ],
     has_optional_output => [
         output_vcf => {
             is => 'Path',
-        },
-        output_result => {
-            is => 'Genome::SoftwareResult',
         },
     ],
 };
@@ -43,38 +47,9 @@ sub result_class {
     die "Abstract method 'result_class' must be defined in class $class";
 }
 
-sub shortcut {
+sub post_get_or_create {
     my $self = shift;
-
-    $self->debug_message("Attempting to get a %s with arugments %s",
-        $self->result_class, pp($self->input_hash));
-    my $result = $self->result_class->get_with_lock($self->input_hash);
-    if ($result) {
-        $self->debug_message("Found existing result (%s) with output_file_path (%s)",
-            $result->id, $result->output_file_path);
-        $self->output_result($result);
-        $self->output_vcf($result->output_file_path);
-        return 1;
-    } else {
-        $self->debug_message("Found no existing result.");
-        return 0;
-    }
-}
-
-sub execute {
-    my $self = shift;
-
-    $self->debug_message("Validating inputs");
-    $self->validate();
-
-    $self->debug_message("Attempting to get or create a %s with arugments %s",
-        $self->result_class, pp({$self->input_hash}));
-    my $result = $self->result_class->get_or_create($self->input_hash);
-    $self->debug_message("Got or created result (%s) with output file path (%s)",
-        $result->id, $result->output_file_path);
-    $self->debug_message("Calculated query for result:\n".pp({$result->calculate_query()}));
-    $self->output_result($result);
-    $self->output_vcf($result->output_file_path);
+    $self->output_vcf($self->output_result->output_file_path);
     return 1;
 }
 
@@ -124,6 +99,9 @@ sub input_hash {
     }
 
     $hash{test_name} = $ENV{GENOME_SOFTWARE_RESULT_TEST_NAME};
+    delete $hash{user};
+    delete $hash{process_id};
+    delete $hash{label};
     return %hash;
 }
 

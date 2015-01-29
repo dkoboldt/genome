@@ -15,7 +15,6 @@ use File::Basename qw/ dirname fileparse /;
 use List::MoreUtils qw(uniq);
 use Regexp::Common;
 use Workflow;
-use YAML;
 use Date::Manip;
 
 use Genome::Sys::LSF::bsub qw();
@@ -1933,26 +1932,7 @@ sub _resolve_type_name_for_class {
 sub get_all_objects {
     my $self = shift;
 
-    my $sorter = sub { # not sure why we sort, but I put it in a anon sub for convenience
-        return unless @_;
-        #if ( $_[0]->id =~ /^\-/) {
-            return sort {$b->id cmp $a->id} @_;
-            #}
-            #else {
-            #return sort {$a->id cmp $b->id} @_;
-            #}
-    };
-
-    return map { $sorter->( $self->$_ ) } (qw(events inputs metrics from_build_links to_build_links));
-}
-
-sub yaml_string {
-    my $self = shift;
-    my $string = YAML::Dump($self);
-    for my $object ($self->get_all_objects) {
-        $string .= YAML::Dump($object);
-    }
-    return $string;
+    return map { $self->$_ } qw(events inputs metrics from_build_links to_build_links);
 }
 
 sub add_to_build{
@@ -2895,6 +2875,12 @@ sub is_current {
     }
 
     return 1;
+}
+
+sub has_imported_instrument_data {
+    my $self = shift;
+    my @instrument_data = $self->instrument_data('subclass_name isa' => 'Genome::InstrumentData::Imported');
+    return scalar(@instrument_data)? 1 : 0;
 }
 
 1;
