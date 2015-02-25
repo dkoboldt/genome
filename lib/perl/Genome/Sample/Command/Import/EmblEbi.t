@@ -16,9 +16,12 @@ use Test::More;
 use_ok('Genome::Sample::Command::Import') or die;
 ok(Genome::Sample::Command::Import::EmblEbi->__meta__, 'class meta for import embl-ebi sample');
 
+my $taxon = Genome::Taxon->__define__(name => 'almost human');
+ok($taxon, 'defined taxon');
 my $individual_name = 'EMBL-HCT00000';
 my $name = $individual_name.'-ERS000000';
 my $import = Genome::Sample::Command::Import::EmblEbi->create(
+    taxon => $taxon,
     name => $name,
     ethnicity => 'caucasian',
     gender => 'male',
@@ -44,6 +47,5 @@ is_deeply($import->_sample->source, $import->_individual, 'sample source');
 my $library_name = $name.'-extlibs';
 is($import->_library->name, $library_name, 'library name');
 is_deeply($import->_library->sample, $import->_sample, 'library sample');
-is(@{$import->_created_objects}, 3, 'created 3 objects');
 
 done_testing();

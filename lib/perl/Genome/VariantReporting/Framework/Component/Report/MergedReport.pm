@@ -17,9 +17,13 @@ class Genome::VariantReporting::Framework::Component::Report::MergedReport {
         'Genome::VariantReporting::Framework::Component::Report::MergeCompatible',
     ],
     has_input => [
-        report_results => {
+        base_report => {
             is => 'Genome::VariantReporting::Framework::Component::Report::MergeCompatible',
-            is_many => 1,
+            doc => 'The main report to be merged.'
+        },
+        supplemental_report => {
+            is => 'Genome::VariantReporting::Framework::Component::Report::MergeCompatible',
+            doc => 'The report that is to be added to the main report.'
         },
     ],
     has_param => [
@@ -31,17 +35,8 @@ class Genome::VariantReporting::Framework::Component::Report::MergedReport {
         contains_header => {
             is => 'Boolean',
         },
-        use_header_from => {
-            is => 'Genome::VariantReporting::Framework::Component::Report::MergeCompatible',
-            is_optional => 1,
-        },
         separator => {
             is => 'Text',
-        },
-        split_indicators => {
-            is => 'Text',
-            is_optional => 1,
-            is_many => 1,
         },
         entry_sources => {
             is_many => 'Text',
@@ -49,59 +44,32 @@ class Genome::VariantReporting::Framework::Component::Report::MergedReport {
             is_optional => 1,
         },
     ],
-    has_transient_optional => [
-        _master_header => {
-            is => 'ARRAY',
-        },
-    ],
 };
 
 sub _run {
     my $self = shift;
 
-    my @reports_with_size = $self->get_reports_with_size;
-    if (scalar(@reports_with_size) == 0) {
+    if (!$self->base_report->has_size && !$self->supplemental_report->has_size) {
         #Create an empty output file
         Genome::Sys->touch($self->_temp_output_file);
         return 1;
     }
 
-    $self->validate(@reports_with_size);
+    $self->validate;
 
     $self->merge_legend_files();
 
-    my $merged_file = $self->merge_files(@reports_with_size);
+    my $merged_file = $self->merge_files;
 
     my $sorted_file = $self->sort_file($merged_file);
 
-    if ($self->split_indicators) {
-        my $split_file = $self->split_file($sorted_file);
-        $self->move_file_to_output($split_file);
-    }
-    else {
-        $self->move_file_to_output($sorted_file);
-    }
+    $self->move_file_to_output($sorted_file);
     return 1;
 }
 
-sub get_reports_with_size {
+sub report_results {
     my $self = shift;
-
-    my @reports_with_size;
-    for my $result ($self->report_results) {
-        if (-s $result->report_path) {
-            push @reports_with_size, $result->report_path;
-        }
-    }
-    return @reports_with_size;
-}
-
-sub columns_to_split {
-    my $self = shift;
-    return grep {
-        my $field = $_;
-        first {$field =~ $_} $self->split_indicators
-    } $self->get_master_header;
+    return ($self->base_report, $self->supplemental_report);
 }
 
 sub move_file_to_output {
@@ -184,10 +152,9 @@ sub _get_headers_and_filters {
 
 sub legend_file_name {
     my $self = shift;
-    my @report_results = $self->report_results;
-    my $first_result = $report_results[0];
-    if ($first_result->can('legend_file_name')) {
-        return $first_result->legend_file_name;
+    my $base_report = $self->base_report;
+    if ($base_report->can('legend_file_name')) {
+        return $base_report->legend_file_name;
     } else {
         return;
     }
@@ -205,16 +172,16 @@ sub legend_path {
 
 sub merge_files {
     my $self = shift;
-    my @reports_with_size = @_;
 
     my $merged_file = Genome::Sys->create_temp_file_path;
 
-    for my $report (@reports_with_size) {
+    for my $report ($self->report_results) {
+        next unless $report->has_size;
         my $file_to_merge;
         if ($self->contains_header) {
             $file_to_merge = Genome::Sys->create_temp_file_path;
             my $reader = Genome::Utility::IO::SeparatedValueReader->create(
-                input => $report,
+                input => $report->report_path,
                 separator => $self->separator,
             );
             my $writer = Genome::Utility::IO::SeparatedValueWriter->create(
@@ -227,9 +194,9 @@ sub merge_files {
                 $writer->write_one($entry);
             }
         } else {
-            $file_to_merge = $report;
+            $file_to_merge = $report->report_path;
         }
-        my $with_source = $self->add_source($report, $file_to_merge);
+        my $with_source = $self->add_source($report->report_path, $file_to_merge);
         my $merge_command = 'cat %s >> %s';
         Genome::Sys->shellcmd(cmd => sprintf($merge_command, $with_source, $merged_file));
     }
@@ -272,102 +239,6 @@ sub sort_file {
     return $sorted_file;
 }
 
-sub split_file {
-    my ($self, $file) = @_;
-    my $split_file = Genome::Sys->create_temp_file_path;
-
-    my @header_fields = $self->get_header($file);
-    my %keys_to_append = $self->get_keys_to_append($file);
-    my @new_header = $self->calculate_new_header(\@header_fields, \%keys_to_append);
-
-    my $writer = Genome::Utility::IO::SeparatedValueWriter->create(
-        headers => [@new_header],
-        print_headers => 1,
-        separator => $self->separator,
-        output => $split_file,
-    );
-
-    my $reader = Genome::Utility::IO::SeparatedValueReader->create(
-        separator => $self->separator,
-        input => $file,
-    );
-    while (my $entry = $reader->next) {
-        my $new_entry = $self->calculate_new_entry($entry, \@header_fields, \%keys_to_append);
-        $writer->write_one($new_entry);
-    }
-    return $split_file;
-}
-
-sub get_keys_to_append {
-    my ($self, $file) = @_;
-
-    my %keys_to_append;
-    for my $header_field ($self->columns_to_split) {
-        $keys_to_append{$header_field} = {};
-    }
-
-    my $reader = Genome::Utility::IO::SeparatedValueReader->create(
-        input => $file,
-        separator => $self->separator,
-    );
-
-    while (my $entry = $reader->next) {
-        for my $field_name ($self->columns_to_split) {
-            my @values = split(",", $entry->{$field_name});
-            for my $value (@values) {
-                unless ($value eq ".") {
-                    my ($sub_field, $sub_value) = split(":", $value);
-                    $keys_to_append{$field_name}->{$sub_field} = $field_name."-".$sub_field;
-                }
-            }
-        }
-    }
-    return %keys_to_append;
-}
-
-sub calculate_new_header {
-    my ($self, $header_fields, $keys_to_append) = @_;
-    my @new_header;
-    for my $header_field (@$header_fields) {
-        if (defined $keys_to_append->{$header_field}) {
-            for my $split_header (values %{$keys_to_append->{$header_field}}) {
-                push @new_header, $split_header;
-            }
-        }
-        else {
-            push @new_header, $header_field;
-        }
-    }
-    return @new_header;
-}
-
-sub calculate_new_entry {
-    my ($self, $entry, $header_fields, $keys_to_append) = @_;
-    my $new_entry;
-    for my $header_field (@$header_fields) {
-        if (defined $keys_to_append->{$header_field}) {
-            my @split_field = split(",", $entry->{$header_field});
-            my %split_field_dict;
-            for my $split_field_item (@split_field) {
-                my ($subfield, $subvalue) = split(":", $split_field_item);
-                $split_field_dict{"$header_field-$subfield"} = $subvalue;
-            }
-            for my $split_header (values %{$keys_to_append->{$header_field}}) {
-                if (defined $split_field_dict{$split_header}) {
-                    $new_entry->{$split_header} = $split_field_dict{$split_header};
-                }
-                else {
-                    $new_entry->{$split_header} = ".";
-                }
-            }
-        }
-        else {
-            $new_entry->{$header_field} = $entry->{$header_field};
-        }
-    }
-    return $new_entry;
-}
-
 sub print_header_to_fh {
     my ($self, $fh) = @_;
     if ($self->contains_header) {
@@ -383,6 +254,7 @@ sub _temp_output_file {
 
 sub report_path {
     my $self = shift;
+    return unless $self->output_dir;
     return File::Spec->join($self->output_dir, $self->file_name);
 }
 
@@ -392,35 +264,28 @@ sub can_be_merged {
 
 sub merge_parameters {
     my $self = shift;
-    my @report_results = $self->report_results;
-    my $result_class = $report_results[0]->class;
-    return $result_class->merge_parameters;
+    return $self->base_report->merge_parameters;
 }
 
 
 sub file_name {
     my $self = shift;
-    my @report_results = $self->report_results;
-    return $report_results[0]->file_name;
+    return $self->base_report->file_name;
 }
 
 
 # Make sure all inputs and outputs are readable. Make sure all headers are the same. Make sure sort_columns are contained in the header (this also ensures they are numeric if they must be).
 sub validate {
     my $self = shift;
-    my @reports_with_size = @_;
 
-    if ($self->split_indicators and !$self->contains_header) {
-        die $self->error_message("If split_indicators are specified, then a header must be present");
-    }
+    Genome::Sys->validate_file_for_reading($self->base_report->report_path);
+    Genome::Sys->validate_file_for_reading($self->supplemental_report->report_path);
 
     my $master_header = Set::Scalar->new($self->get_master_header);
-    for my $report (@reports_with_size) {
-        Genome::Sys->validate_file_for_reading($report);
-
-        my $current_header = Set::Scalar->new($self->get_header($report));
-        unless ($current_header->is_equal($master_header)) {
-            die $self->error_message("Headers for the reports are not the same. First header:\n%s\nCurrent header:\n%s", $master_header, $current_header);
+    if ($self->supplemental_report->has_size) {
+        my $supplemental_report_header = Set::Scalar->new($self->get_header($self->supplemental_report->report_path));
+        unless ($supplemental_report_header->is_equal($master_header)) {
+            die $self->error_message("Headers for the reports are not the same. Base report header:\n%s\nSupplemental report header:\n%s", $master_header, $supplemental_report_header);
         }
     }
 
@@ -468,24 +333,7 @@ sub get_sort_column_numbers {
 sub get_master_header {
     my $self = shift;
 
-    unless (defined($self->_master_header)) {
-        my $result;
-        if (defined($self->use_header_from) &&
-            -s $self->use_header_from->report_path) {
-            $result = $self->use_header_from;
-        } else {
-            my @report_results = grep {-s $_->report_path}
-                $self->report_results;
-            if (@report_results) {
-                $result = shift @report_results;
-            } else {
-                die "No files available to get_master_header";
-            }
-        }
-        my @header = $self->get_header($result->report_path);
-        $self->_master_header(\@header);
-    }
-    return @{$self->_master_header};
+    return $self->get_header($self->base_report->report_path);
 }
 
 sub get_master_header_with_source {

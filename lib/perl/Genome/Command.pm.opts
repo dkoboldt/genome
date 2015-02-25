@@ -1252,6 +1252,8 @@ $Genome::Command::OPTS_SPEC = [
     ],
     '>copy-config',
     [
+      'tags!',
+      undef,
       'from-project=s',
       undef,
       'to-project=s',
@@ -1269,8 +1271,6 @@ $Genome::Command::OPTS_SPEC = [
     '>view',
     [
       'color!',
-      undef,
-      'COLUMN-WIDTH=s',
       undef,
       'config=s',
       [
@@ -1332,6 +1332,15 @@ $Genome::Command::OPTS_SPEC = [
     ],
     '>subject-mapping',
     [
+      '>view',
+      [
+        'color!',
+        undef,
+        'analysis-project=s',
+        undef,
+        'help!',
+        undef
+      ],
       '>import',
       [
         '>somatic-validation',
@@ -3551,7 +3560,7 @@ $Genome::Command::OPTS_SPEC = [
       [
         'outdir=s',
         'files',
-        'build-id=s',
+        'build=s',
         undef,
         'help!',
         undef
@@ -4609,7 +4618,7 @@ $Genome::Command::OPTS_SPEC = [
       [
         'outdir=s',
         'files',
-        'build-id=s',
+        'build=s',
         undef,
         'help!',
         undef
@@ -6486,6 +6495,21 @@ $Genome::Command::OPTS_SPEC = [
           'help!',
           undef
         ],
+        '>dgidb-counts',
+        [
+          'builds=s@',
+          undef,
+          'outdir=s',
+          'files',
+          'bam-readcount-version=s',
+          'files',
+          'mq=s',
+          undef,
+          'bq=s',
+          undef,
+          'help!',
+          undef
+        ],
         '>cancer-relevance-score',
         [
           'builds=s@',
@@ -6553,6 +6577,23 @@ $Genome::Command::OPTS_SPEC = [
           'files',
           'unfiltered-report=s',
           'files',
+          'help!',
+          undef
+        ],
+        '>dgidb-genes',
+        [
+          'builds=s@',
+          undef,
+          'outdir=s',
+          'files',
+          'bam-readcount-version=s',
+          'files',
+          'cancer-annotation-db=s',
+          undef,
+          'mq=s',
+          undef,
+          'bq=s',
+          undef,
           'help!',
           undef
         ],
@@ -8106,6 +8147,15 @@ $Genome::Command::OPTS_SPEC = [
     ],
     '>instrument-data',
     [
+      '>alignment-bams',
+      [
+        'outdir=s',
+        'files',
+        'build=s',
+        undef,
+        'help!',
+        undef
+      ],
       '>assign',
       [
         '>all-compatible',
@@ -8137,19 +8187,6 @@ $Genome::Command::OPTS_SPEC = [
           'newly-added-data=s@',
           undef,
           'instrument-data=s@',
-          undef,
-          'help!',
-          undef
-        ],
-        '>analysis-project',
-        [
-          'analysis-project=s',
-          undef,
-          'model=s',
-          undef,
-          'force!',
-          undef,
-          'newly-added-data=s@',
           undef,
           'help!',
           undef
@@ -10404,16 +10441,23 @@ $Genome::Command::OPTS_SPEC = [
     [
       '>Sra',
       [
-        'name=s',
-        'files',
         'extraction-type=s',
         'files',
+        'name=s',
+        'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -10421,18 +10465,27 @@ $Genome::Command::OPTS_SPEC = [
       [
         'name=s',
         'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
       '>Dbgap',
       [
         'name=s',
+        'files',
+        'race=s',
         'files',
         'extraction-type=s',
         [
@@ -10442,18 +10495,23 @@ $Genome::Command::OPTS_SPEC = [
           'rna',
           'total rna'
         ],
-        'race=s',
-        'files',
         'tissue=s',
         'files',
         'gender=s',
         'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -10481,12 +10539,19 @@ $Genome::Command::OPTS_SPEC = [
           'female',
           'unknown'
         ],
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -10513,12 +10578,19 @@ $Genome::Command::OPTS_SPEC = [
         'files',
         'age=s',
         'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'disease=s',
         'files',
         'help!',
@@ -10526,16 +10598,23 @@ $Genome::Command::OPTS_SPEC = [
       ],
       '>Lsr',
       [
-        'name=s',
-        'files',
         'extraction-type=s',
         'files',
+        'name=s',
+        'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -10547,27 +10626,41 @@ $Genome::Command::OPTS_SPEC = [
         'files',
         'extraction-type=s',
         'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
       '>Brc46',
       [
-        'name=s',
-        'files',
         'extraction-type=s',
         'files',
+        'name=s',
+        'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -10591,12 +10684,19 @@ $Genome::Command::OPTS_SPEC = [
         'files',
         'gender=s',
         'files',
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -10612,12 +10712,19 @@ $Genome::Command::OPTS_SPEC = [
           'rna',
           'total rna'
         ],
+        'taxon=s',
+        undef,
         'individual-attributes=s@',
         'files',
         'sample-attributes=s@',
         'files',
         'library-attributes=s@',
         'files',
+        'library-extension=s',
+        [
+          'extlibs',
+          'microarraylib'
+        ],
         'help!',
         undef
       ],
@@ -11392,8 +11499,12 @@ $Genome::Command::OPTS_SPEC = [
         undef,
         'igv-reference-name=s',
         'files',
+        'max-indel-size=s',
+        undef,
         'process-svs!',
         undef,
+        'reference-transcripts=s',
+        'files',
         'restrict-to-target-regions!',
         undef,
         'sample-name=s',
@@ -24205,6 +24316,8 @@ $Genome::Command::OPTS_SPEC = [
         undef,
         'maximum-permgen-memory=s',
         undef,
+        'read-name-regex=s',
+        'files',
         'remove-duplicates=s',
         [
           1,
@@ -26450,6 +26563,8 @@ $Genome::Command::OPTS_SPEC = [
         'igv-reference-name=s',
         'files',
         'include-vcfs-in-archive!',
+        undef,
+        'max-indel-size=s',
         undef,
         'process-svs!',
         undef,
@@ -36875,18 +36990,18 @@ $Genome::Command::OPTS_SPEC = [
     [
       '>basic',
       [
+        'analysis-project=s',
+        undef,
         'import-source-name=s',
         'files',
         'library=s',
         undef,
         'source-files=s@',
         'files',
-        'analysis-project=s',
-        undef,
-        'downsample-ratio=s',
-        undef,
         'description=s',
         'files',
+        'downsample-ratio=s',
+        undef,
         'instrument-data-properties=s@',
         'files',
         'original-format=s',
@@ -36914,10 +37029,10 @@ $Genome::Command::OPTS_SPEC = [
       ],
       '>manager',
       [
-        'source-files-tsv=s',
-        'files',
         'analysis-project=s',
         undef,
+        'source-files-tsv=s',
+        'files',
         'launch-config=s',
         'files',
         'list-config=s',
@@ -37789,6 +37904,8 @@ $Genome::Command::OPTS_SPEC = [
       ],
       '>copy-config',
       [
+        'tags!',
+        undef,
         'from-project=s',
         undef,
         'to-project=s',
@@ -37806,8 +37923,6 @@ $Genome::Command::OPTS_SPEC = [
       '>view',
       [
         'color!',
-        undef,
-        'COLUMN-WIDTH=s',
         undef,
         'config=s',
         [
@@ -37869,6 +37984,15 @@ $Genome::Command::OPTS_SPEC = [
       ],
       '>subject-mapping',
       [
+        '>view',
+        [
+          'color!',
+          undef,
+          'analysis-project=s',
+          undef,
+          'help!',
+          undef
+        ],
         '>import',
         [
           '>somatic-validation',
